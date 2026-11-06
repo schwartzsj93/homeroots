@@ -449,13 +449,17 @@ async function tellStory(){
   const system = `You are a local historian for Highland Park and Highwood, Illinois, writing for a homeowner. Write a short narrative (3 to 5 paragraphs, about 250 to 400 words) telling the story of the land under one house, from Potawatomi country and the Green Bay trail, through the first land patents and the farm families on the 19th-century maps, the subdivision era, to the present house. Use ONLY the facts supplied, plus well-established general Highland Park history (1833 treaty, Green Bay Road as post road 1832, incorporation 1869, Ravinia annexed 1899, 1920s annexations). Names transcribed from maps are unverified: say so plainly where you use them ("the maps show", "appears to have been"). Never invent owners, dates, prices or anecdotes. Do not restate every figure; weave the telling ones in. Plain, warm, specific prose. No headings, no bullet points, no preamble.`;
   try{
     const r = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
-      body: JSON.stringify({ model:STORY_MODEL, max_tokens:1200, stream:true, system, messages:[{role:'user', content:'Findings for this property:\n\n'+facts}] }) });
+      body: JSON.stringify({ model:STORY_MODEL, max_tokens:3000, stream:true, system, messages:[{role:'user', content:'Findings for this property:\n\n'+facts}] }) });
     if(!r.ok){ const t = await r.text(); throw new Error(r.status===401?'That API key was rejected. Check it and try again.':`Claude returned ${r.status}: ${t.slice(0,160)}`); }
     const reader = r.body.getReader(); const dec = new TextDecoder(); let text='', buf='';
     const out = document.getElementById('storyText');
+    let stop=null;
+    const handle = ln => { if(!ln.startsWith('data: ')) return; try{ const ev = JSON.parse(ln.slice(6)); if(ev.type==='content_block_delta' && ev.delta?.text){ text += ev.delta.text; out.textContent = text; } if(ev.type==='message_delta' && ev.delta?.stop_reason) stop = ev.delta.stop_reason; if(ev.type==='error') throw new Error(ev.error?.message||'stream error'); }catch(e){ if(e.message && !(e instanceof SyntaxError)) throw e; } };
     while(true){ const {value, done} = await reader.read(); if(done) break; buf += dec.decode(value, {stream:true});
-      const lines = buf.split('\n'); buf = lines.pop();
-      for(const ln of lines){ if(!ln.startsWith('data: ')) continue; try{ const ev = JSON.parse(ln.slice(6)); if(ev.type==='content_block_delta' && ev.delta?.text){ text += ev.delta.text; out.textContent = text; } }catch(e){} } }
+      const lines = buf.split('\n'); buf = lines.pop(); lines.forEach(handle); }
+    buf += dec.decode(); buf.split('\n').forEach(handle);
+    if(stop==='max_tokens') text += '\n\n[The story reached its length limit here. Click "Rewrite the story" to try again.]';
+    if(!text.trim()) throw new Error('Claude returned an empty story. Try again.');
     current.story = text.trim(); current.storyModel = STORY_MODEL;
     try{ const saved = store.get('stories',{}); saved[current.pin] = {text:current.story, model:STORY_MODEL, when:Date.now()}; store.set('stories', saved); }catch(e){}
     render(current.feat);
