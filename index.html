@@ -43,6 +43,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--survey);outline
 #status{font-size:12.5px;color:var(--ink-2);margin:10px 0 0;min-height:1.2em}
 #status.err{color:var(--plat)}
 section.card{border-top:1px solid var(--rule);padding-block:14px 4px}
+.story{background:var(--survey-soft);border-radius:8px;padding:12px 14px;margin:8px 0 4px;font-size:13.5px}
+.story p{margin:0 0 8px}.story p:last-child{margin:0}
+.story .meta{font:500 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin-bottom:6px}
+.keyrow{display:flex;gap:6px;margin-top:6px}.keyrow input{flex:1;min-width:0;font:12.5px var(--mono);padding:6px 8px;border:1px solid var(--rule);border-radius:5px;background:var(--bg);color:var(--ink)}
 .exportbar{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px}
 .exportbar button{font:500 12px var(--sans);padding:6px 10px;border-radius:5px;border:1px solid var(--rule);background:transparent;color:var(--survey);cursor:pointer}
 .exportbar button.primary{background:var(--survey);color:#fff;border-color:var(--survey)}
@@ -362,7 +366,9 @@ async function render(feat){
   const legal = [a.legdesc1,a.legdesc2,a.legdesc3].filter(Boolean).join(' ');
   const subName = subs[0]?.Name || (legal.split(';')[0]||'').trim();
   const sales = [[a.sale_date1,a.sale_amt1,a.doc_num1],[a.sale_date2,a.sale_amt2,a.doc_num2]].filter(s=>s[0]).sort((x,y)=>y[0]-x[0]);
-  current = { a, feat, trs, pin, quarter, subs, hists, names, legal, subName, sales, ctr, when:new Date() };
+  const prev = current && current.pin===pin ? current : null;
+  const savedStory = (store.get('stories',{})||{})[pin];
+  current = { a, feat, trs, pin, quarter, subs, hists, names, legal, subName, sales, ctr, when:new Date(), story: prev?.story||savedStory?.text||null, storyModel: prev?.storyModel||savedStory?.model||null };
 
   $('#result').innerHTML = `
   <section class="card">
@@ -386,6 +392,12 @@ async function render(feat){
       <dt>Class</dt><dd>${esc(a.class_desc_pardat||'—')}</dd>
     </dl>
     ${sales.length?`<div class="eyebrow">Recent transfers (assessor)</div><ul class="timeline">${sales.map(s=>`<li><span class="yr">${fmtDate(s[0])}</span> · ${fmtMoney(s[1])||'no price'} ${s[2]?`<span class="nt">doc ${esc(s[2])}</span>`:''}</li>`).join('')}</ul>`:''}
+  </section>
+  <section class="card" id="storyCard">
+    <h2>The story so far</h2>
+    <div id="storyBody">${current.story?`<div class="story"><div class="meta">Written by Claude from the findings below · ${esc(current.storyModel||'')}</div>${current.story.split(/\n\s*\n/).map(p=>`<p>${esc(p)}</p>`).join('')}</div>`:`<p class="hint" style="margin:0 0 6px">Claude can turn the facts on this page into a short narrative for the owner. It uses only what is shown here plus general Highland Park history, and flags what is unverified.</p>`}
+    <div class="exportbar"><button type="button" class="primary" data-s="tell">${current.story?'Rewrite the story':'Tell the story'}</button><button type="button" data-s="key">${store.get('apikey','')?'Change API key':'Set API key'}</button></div>
+    <div id="keyRow" hidden><div class="keyrow"><input id="apikey" type="password" placeholder="Anthropic API key (sk-ant-…)" autocomplete="off"><button class="btn" type="button" data-s="savekey">Save</button></div><p class="hint">Stored only in this browser. Get one at console.anthropic.com. Each story costs about a cent.</p></div>
   </section>
   <section class="card">
     <h2>Parcel lineage, 1996 to today</h2>
@@ -426,12 +438,43 @@ async function render(feat){
 }
 
 
+
+/* ---------- AI story (calls Anthropic directly; key stays in this browser) ---------- */
+const STORY_MODEL = 'claude-sonnet-5-5';
+async function tellStory(){
+  const key = store.get('apikey',''); if(!key){ document.getElementById('keyRow').hidden=false; document.getElementById('apikey').focus(); return; }
+  const body = document.getElementById('storyBody'); const btn = document.querySelector('button[data-s=tell]'); btn.disabled=true; btn.textContent='Writing…';
+  body.innerHTML = '<div class="story"><div class="meta">Writing…</div><p id="storyText"></p></div>';
+  const facts = reportMD(current, true);
+  const system = `You are a local historian for Highland Park and Highwood, Illinois, writing for a homeowner. Write a short narrative (3 to 5 paragraphs, about 250 to 400 words) telling the story of the land under one house, from Potawatomi country and the Green Bay trail, through the first land patents and the farm families on the 19th-century maps, the subdivision era, to the present house. Use ONLY the facts supplied, plus well-established general Highland Park history (1833 treaty, Green Bay Road as post road 1832, incorporation 1869, Ravinia annexed 1899, 1920s annexations). Names transcribed from maps are unverified: say so plainly where you use them ("the maps show", "appears to have been"). Never invent owners, dates, prices or anecdotes. Do not restate every figure; weave the telling ones in. Plain, warm, specific prose. No headings, no bullet points, no preamble.`;
+  try{
+    const r = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+      body: JSON.stringify({ model:STORY_MODEL, max_tokens:1200, stream:true, system, messages:[{role:'user', content:'Findings for this property:\n\n'+facts}] }) });
+    if(!r.ok){ const t = await r.text(); throw new Error(r.status===401?'That API key was rejected. Check it and try again.':`Claude returned ${r.status}: ${t.slice(0,160)}`); }
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let text='', buf='';
+    const out = document.getElementById('storyText');
+    while(true){ const {value, done} = await reader.read(); if(done) break; buf += dec.decode(value, {stream:true});
+      const lines = buf.split('\n'); buf = lines.pop();
+      for(const ln of lines){ if(!ln.startsWith('data: ')) continue; try{ const ev = JSON.parse(ln.slice(6)); if(ev.type==='content_block_delta' && ev.delta?.text){ text += ev.delta.text; out.textContent = text; } }catch(e){} } }
+    current.story = text.trim(); current.storyModel = STORY_MODEL;
+    try{ const saved = store.get('stories',{}); saved[current.pin] = {text:current.story, model:STORY_MODEL, when:Date.now()}; store.set('stories', saved); }catch(e){}
+    render(current.feat);
+  }catch(err){ body.innerHTML = `<p class="hint" style="color:var(--plat)">${esc(err.message==='Failed to fetch'?'Could not reach Claude. Check your connection or ad blocker.':err.message)}</p>`; btn.disabled=false; btn.textContent='Tell the story'; }
+}
+document.getElementById('result').addEventListener('click', e=>{
+  const b=e.target.closest('button[data-s]'); if(!b) return;
+  if(b.dataset.s==='tell') tellStory();
+  if(b.dataset.s==='key'){ const row=document.getElementById('keyRow'); row.hidden=!row.hidden; if(!row.hidden) document.getElementById('apikey').focus(); }
+  if(b.dataset.s==='savekey'){ const v=document.getElementById('apikey').value.trim(); if(v){ store.set('apikey', v); document.getElementById('keyRow').hidden=true; b.closest('section').querySelector('button[data-s=key]').textContent='Change API key'; setStatus('API key saved in this browser.'); } }
+});
+
 /* ---------- Export ---------- */
 function dl(name, text, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; document.body.appendChild(a); a.click(); a.remove(); }
 function slug(s){ return String(s||'home').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
-function reportMD(c){
+function reportMD(c, noStory){
   const a=c.a, L=[];
   L.push(`# ${a.situs_addr_line_1||'Parcel '+fmtPIN(c.pin)}`, `${a.MUNI_NAME||''}, ${a.TOWNSHIPNAME||''} Township, Lake County, Illinois`, '', `HomeRoots report generated ${c.when.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}. Parcel and lineage data: Lake County GIS and CCAO. Map names are transcriptions and are unverified unless marked confirmed.`, '');
+  if(c.story && !noStory){ L.push('## The story so far','', c.story, '', '_Narrative written by Claude ('+(c.storyModel||'')+') from the findings in this report; map-derived names are unverified._',''); }
   L.push('## Where it sits','', `- **PIN:** ${fmtPIN(c.pin)}`, `- **Survey grid:** Section ${a.SECT}, Township ${a.TOWN} North, Range ${a.RANGE} East, 3rd Principal Meridian`, `- **PIN decoded:** ${c.pin.slice(0,2)} = ${a.TOWNSHIPNAME} township, ${c.pin.slice(2,4)} = section, ${c.pin.slice(4,7)} = block in the ${c.quarter} quarter, ${c.pin.slice(7)} = parcel`, `- **Lot size:** ${a.lot_area_acres?a.lot_area_acres.toFixed(3)+' acres':'n/a'}${a.ZONING?' · zoned '+a.ZONING:''}`, `- **Center:** ${c.ctr.lat.toFixed(6)}, ${c.ctr.lng.toFixed(6)}`, '');
   L.push('## The lot','', `- **Legal description:** ${c.legal||'n/a'}`, `- **Recorded subdivision:** ${c.subs.length?c.subs.map(s=>s.Name+' ('+s.ConveyanceType+')').join('; '):'none mapped at this point'}`, `- **Year built:** ${a.improve_year_built||'n/a'}${a.stories?' · '+a.stories.toLowerCase():''}${a.const_type?' · '+a.const_type:''}`, `- **Class:** ${a.class_desc_pardat||'n/a'}`, '');
   if(c.sales.length){ L.push('### Recent transfers (assessor)',''); c.sales.forEach(s=>L.push(`- ${fmtDate(s[0])}: ${fmtMoney(s[1])||'no price'}${s[2]?' (doc '+s[2]+')':''}`)); L.push(''); }
@@ -451,6 +494,7 @@ function reportHTML(c){
 <div class="sub">${e(a.MUNI_NAME||'')} · ${e(a.TOWNSHIPNAME||'')} Township · Lake County, Illinois</div>
 <h1>${e(a.situs_addr_line_1||'Parcel '+fmtPIN(c.pin))}</h1>
 <div class="pin">PIN ${fmtPIN(c.pin)}</div>
+${c.story?`<h2>The story so far</h2>${c.story.split(/\n\s*\n/).map(p=>'<p>'+e(p)+'</p>').join('')}<p class="foot">Narrative written by Claude (${e(c.storyModel||'')}) from the findings in this report; names read from maps are unverified.</p>`:''}
 <h2>Where it sits</h2><table>
 ${row('Survey grid',`Section ${a.SECT}, Township ${a.TOWN} North, Range ${a.RANGE} East, 3rd Principal Meridian`)}
 ${row('PIN decoded',`${c.pin.slice(0,2)} = ${e(a.TOWNSHIPNAME)} township · ${c.pin.slice(2,4)} = section · ${c.pin.slice(4,7)} = block in the ${c.quarter} quarter · ${c.pin.slice(7)} = parcel`)}
