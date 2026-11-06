@@ -43,6 +43,9 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--survey);outline
 #status{font-size:12.5px;color:var(--ink-2);margin:10px 0 0;min-height:1.2em}
 #status.err{color:var(--plat)}
 section.card{border-top:1px solid var(--rule);padding-block:14px 4px}
+.exportbar{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px}
+.exportbar button{font:500 12px var(--sans);padding:6px 10px;border-radius:5px;border:1px solid var(--rule);background:transparent;color:var(--survey);cursor:pointer}
+.exportbar button.primary{background:var(--survey);color:#fff;border-color:var(--survey)}
 section.card h2{font:700 16px/1.2 var(--serif);margin:0 0 8px}
 .eyebrow{font:500 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
 .addr{font:700 22px/1.15 var(--serif);margin:4px 0 2px;text-wrap:balance}
@@ -211,6 +214,7 @@ const store = {
 };
 let userNames = store.get('names', []);
 let placements = store.get('placements2', {});
+let current = null;
 
 /* ---------- Map ---------- */
 const map = L.map('leaflet', { zoomControl:true }).setView([42.1835, -87.80], 13);
@@ -333,6 +337,7 @@ async function lookup(q){
     }
     if(!feat) throw new Error('No parcel found for that entry.');
     await render(feat);
+    try{ history.replaceState(null,'','#'+encodeURIComponent(fmtPIN(feat.properties.PIN))); }catch(e){}
     setStatus('');
   }catch(err){ setStatus(err.message==='Failed to fetch' ? 'Could not reach Lake County GIS. Open this file in a browser with internet access.' : err.message, true); }
 }
@@ -357,12 +362,14 @@ async function render(feat){
   const legal = [a.legdesc1,a.legdesc2,a.legdesc3].filter(Boolean).join(' ');
   const subName = subs[0]?.Name || (legal.split(';')[0]||'').trim();
   const sales = [[a.sale_date1,a.sale_amt1,a.doc_num1],[a.sale_date2,a.sale_amt2,a.doc_num2]].filter(s=>s[0]).sort((x,y)=>y[0]-x[0]);
+  current = { a, feat, trs, pin, quarter, subs, hists, names, legal, subName, sales, ctr, when:new Date() };
 
   $('#result').innerHTML = `
   <section class="card">
     <div class="eyebrow">${esc(a.MUNI_NAME||'')} · ${esc(a.TOWNSHIPNAME||'')} Township</div>
     <div class="addr">${esc(a.situs_addr_line_1||'(no situs address)')}</div>
     <div class="pin">PIN ${fmtPIN(pin)}</div>
+    <div class="exportbar" aria-label="Export"><button type="button" class="primary" data-x="print">Print / save PDF</button><button type="button" data-x="md">Download Markdown</button><button type="button" data-x="json">Download JSON</button><button type="button" data-x="link">Copy link</button></div>
     <dl>
       <dt>Survey grid</dt><dd>Section ${a.SECT}, Township ${a.TOWN} North, Range ${a.RANGE} East, 3rd P.M. <span class="chip confirmed">county</span></dd>
       <dt>PIN decoded</dt><dd class="mono">${twpCode} = ${esc(a.TOWNSHIPNAME)} twp · ${pin.slice(2,4)} = section · ${block} = block in ${quarter} ¼ · ${pin.slice(7)} = parcel</dd>
@@ -417,6 +424,68 @@ async function render(feat){
     store.set('names', userNames); render(feat);
   });
 }
+
+
+/* ---------- Export ---------- */
+function dl(name, text, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; document.body.appendChild(a); a.click(); a.remove(); }
+function slug(s){ return String(s||'home').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+function reportMD(c){
+  const a=c.a, L=[];
+  L.push(`# ${a.situs_addr_line_1||'Parcel '+fmtPIN(c.pin)}`, `${a.MUNI_NAME||''}, ${a.TOWNSHIPNAME||''} Township, Lake County, Illinois`, '', `HomeRoots report generated ${c.when.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}. Parcel and lineage data: Lake County GIS and CCAO. Map names are transcriptions and are unverified unless marked confirmed.`, '');
+  L.push('## Where it sits','', `- **PIN:** ${fmtPIN(c.pin)}`, `- **Survey grid:** Section ${a.SECT}, Township ${a.TOWN} North, Range ${a.RANGE} East, 3rd Principal Meridian`, `- **PIN decoded:** ${c.pin.slice(0,2)} = ${a.TOWNSHIPNAME} township, ${c.pin.slice(2,4)} = section, ${c.pin.slice(4,7)} = block in the ${c.quarter} quarter, ${c.pin.slice(7)} = parcel`, `- **Lot size:** ${a.lot_area_acres?a.lot_area_acres.toFixed(3)+' acres':'n/a'}${a.ZONING?' · zoned '+a.ZONING:''}`, `- **Center:** ${c.ctr.lat.toFixed(6)}, ${c.ctr.lng.toFixed(6)}`, '');
+  L.push('## The lot','', `- **Legal description:** ${c.legal||'n/a'}`, `- **Recorded subdivision:** ${c.subs.length?c.subs.map(s=>s.Name+' ('+s.ConveyanceType+')').join('; '):'none mapped at this point'}`, `- **Year built:** ${a.improve_year_built||'n/a'}${a.stories?' · '+a.stories.toLowerCase():''}${a.const_type?' · '+a.const_type:''}`, `- **Class:** ${a.class_desc_pardat||'n/a'}`, '');
+  if(c.sales.length){ L.push('### Recent transfers (assessor)',''); c.sales.forEach(s=>L.push(`- ${fmtDate(s[0])}: ${fmtMoney(s[1])||'no price'}${s[2]?' (doc '+s[2]+')':''}`)); L.push(''); }
+  L.push('## Parcel lineage, 1996 to today','');
+  if(c.hists.length){ c.hists.forEach(h=>L.push(`- ${fmtDate(h.DisplayStartDate)} to ${h.DisplayEndDate?fmtDate(h.DisplayEndDate):'present'}: PIN ${fmtPIN(h.PIN)}${h.PIN===c.pin?' (current)':''}`)); if(c.hists.every(h=>h.PIN!==c.pin)) L.push(`- current: PIN ${fmtPIN(c.pin)} (created by consolidation or split)`); } else L.push('- no historic parcel records returned');
+  L.push('', `## Names on the old maps, Section ${a.SECT}`, '', '| Year | Name | Note | Confidence | Source |', '|---|---|---|---|---|');
+  if(c.names.length) c.names.forEach(n=>L.push(`| ${n.year} | ${n.name} | ${n.note||''} | ${n.conf} | ${n.src} |`)); else L.push('| | no transcriptions yet | | | |');
+  L.push('', '## Research this lot','', `- Illinois Public Domain Land Tract Sales (Section ${a.SECT}, T${a.TOWN}N R${a.RANGE}E): https://apps.ilsos.gov/isa/pubdomsrch.jsp`, `- Lake County Recorder of Deeds (plat of ${c.subName||'the subdivision'}, deed chain for PIN ${fmtPIN(c.pin)}): https://www.lakecountyil.gov/178/Recorder-of-Deeds`, '- Lake County historic aerials: https://maps.lakecountyil.gov/historicaerials/', '- 1840 Federal Township Plats: https://maps.lakecountyil.gov/GLO/', `- Highland Park Historical Society archive: https://highlandparkhistory.libraryhost.com/index.php/informationobject/browse?topLod=0&query=${encodeURIComponent((c.subName||'').split(';')[0])}`, '- HPPL obituary and newspaper indexes: https://hplibrary.org/obituary-index', '- 1981 National Register survey: https://npgallery.nps.gov/GetAsset/bd422496-4596-4f74-89ea-d60a5f77a273', '', `Permalink: ${location.origin}${location.pathname}#${encodeURIComponent(fmtPIN(c.pin))}`);
+  return L.join('\n');
+}
+function reportHTML(c){
+  const a=c.a, e=esc;
+  const row=(k,v)=>`<tr><th>${k}</th><td>${v}</td></tr>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${e(a.situs_addr_line_1||fmtPIN(c.pin))} · HomeRoots report</title>
+<style>body{font:13px/1.5 "IBM Plex Sans",-apple-system,Segoe UI,sans-serif;color:#1d262d;max-width:760px;margin:32px auto;padding:0 20px}h1{font:700 26px/1.1 "Libre Caslon Text",Georgia,serif;margin:0 0 2px}h2{font:700 16px "Libre Caslon Text",Georgia,serif;border-top:1px solid #d5dbe0;padding-top:12px;margin:18px 0 6px}.sub{color:#56626b;margin:0 0 4px}.pin{font-family:"IBM Plex Mono",Menlo,monospace;color:#2d5f8b;font-size:15px}table{border-collapse:collapse;width:100%;margin:6px 0}th,td{text-align:left;vertical-align:top;padding:4px 8px;border-bottom:1px solid #e3e8ec;font-size:12.5px}th{width:160px;color:#56626b;font-weight:500}.names th{width:auto;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}.chip{font:500 10.5px "IBM Plex Mono",monospace;border:1px solid #c9d1d8;border-radius:999px;padding:0 6px;color:#56626b}.foot{color:#56626b;font-size:11.5px;margin-top:18px}a{color:#2d5f8b}.bar{display:flex;gap:8px;margin:0 0 16px}.bar button{font:500 13px -apple-system,sans-serif;padding:8px 14px;border:0;border-radius:6px;background:#b4322a;color:#fff;cursor:pointer}@media print{.bar{display:none}body{margin:0}}</style></head><body>
+<div class="bar"><button onclick="window.print()">Print or save as PDF</button></div>
+<div class="sub">${e(a.MUNI_NAME||'')} · ${e(a.TOWNSHIPNAME||'')} Township · Lake County, Illinois</div>
+<h1>${e(a.situs_addr_line_1||'Parcel '+fmtPIN(c.pin))}</h1>
+<div class="pin">PIN ${fmtPIN(c.pin)}</div>
+<h2>Where it sits</h2><table>
+${row('Survey grid',`Section ${a.SECT}, Township ${a.TOWN} North, Range ${a.RANGE} East, 3rd Principal Meridian`)}
+${row('PIN decoded',`${c.pin.slice(0,2)} = ${e(a.TOWNSHIPNAME)} township · ${c.pin.slice(2,4)} = section · ${c.pin.slice(4,7)} = block in the ${c.quarter} quarter · ${c.pin.slice(7)} = parcel`)}
+${row('Lot size',`${a.lot_area_acres?a.lot_area_acres.toFixed(3)+' acres':'n/a'}${a.ZONING?' · zoned '+e(a.ZONING):''}`)}
+${row('Center',`${c.ctr.lat.toFixed(6)}, ${c.ctr.lng.toFixed(6)}`)}</table>
+<h2>The lot</h2><table>
+${row('Legal description',e(c.legal||'n/a'))}
+${row('Recorded subdivision',c.subs.length?c.subs.map(s=>e(s.Name)+' <span class="chip">'+e(s.ConveyanceType)+'</span>').join('<br>'):'none mapped at this point')}
+${row('Year built',`${a.improve_year_built||'n/a'}${a.stories?' · '+e(a.stories.toLowerCase()):''}${a.const_type?' · '+e(a.const_type):''}`)}
+${row('Class',e(a.class_desc_pardat||'n/a'))}
+${c.sales.map(s=>row('Transfer',`${fmtDate(s[0])} · ${fmtMoney(s[1])||'no price'}${s[2]?' · doc '+e(s[2]):''}`)).join('')}</table>
+<h2>Parcel lineage, 1996 to today</h2><table>
+${c.hists.length?c.hists.map(h=>row(`${fmtDate(h.DisplayStartDate)} → ${h.DisplayEndDate?fmtDate(h.DisplayEndDate):'present'}`,`PIN ${fmtPIN(h.PIN)}${h.PIN===c.pin?' <span class="chip">current</span>':''}`)).join('')+(c.hists.every(h=>h.PIN!==c.pin)?row('current',`PIN ${fmtPIN(c.pin)} <span class="chip">created by consolidation or split</span>`):''):row('','no historic parcel records returned')}</table>
+<h2>Names on the old maps · Section ${a.SECT}</h2>
+<table class="names"><tr><th>Year</th><th>Name</th><th>Note</th><th>Confidence</th><th>Source</th></tr>
+${c.names.length?c.names.map(n=>`<tr><td>${e(n.year)}</td><td>${e(n.name)}</td><td>${e(n.note||'')}</td><td><span class="chip">${e(n.conf)}</span></td><td>${e(n.src)}</td></tr>`).join(''):'<tr><td colspan="5">No transcriptions yet for this section.</td></tr>'}</table>
+<p class="foot">read = read off a map scan, unverified · confirmed = backed by a record · inferred = reasoned from context. A deed or abstract of title is what proves ownership of this exact lot.</p>
+<h2>Research this lot</h2><ul>
+<li><a href="https://apps.ilsos.gov/isa/pubdomsrch.jsp">Illinois Public Domain Land Tract Sales</a> · Section ${a.SECT}, T${a.TOWN}N R${a.RANGE}E</li>
+<li><a href="https://www.lakecountyil.gov/178/Recorder-of-Deeds">Lake County Recorder of Deeds</a> · plat of ${e(c.subName||'the subdivision')}, deed chain for PIN ${fmtPIN(c.pin)}</li>
+<li><a href="https://maps.lakecountyil.gov/historicaerials/">Lake County historic aerials</a> · <a href="https://maps.lakecountyil.gov/GLO/">1840 Federal Township Plats</a></li>
+<li><a href="https://highlandparkhistory.libraryhost.com/index.php/informationobject/browse?topLod=0&query=${encodeURIComponent((c.subName||'').split(';')[0])}">Highland Park Historical Society archive</a> · <a href="https://hplibrary.org/obituary-index">HPPL obituary and newspaper indexes</a></li>
+<li><a href="https://npgallery.nps.gov/GetAsset/bd422496-4596-4f74-89ea-d60a5f77a273">1981 National Register survey of Highland Park</a></li></ul>
+<p class="foot">HomeRoots report generated ${c.when.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}. Parcel, subdivision and lineage data from Lake County GIS and the Chief County Assessment Office. Permalink: <a href="${location.origin}${location.pathname}#${encodeURIComponent(fmtPIN(c.pin))}">${location.origin}${location.pathname}#${fmtPIN(c.pin)}</a></p>
+</body></html>`;
+}
+document.getElementById('result').addEventListener('click', e=>{
+  const b=e.target.closest('button[data-x]'); if(!b||!current) return;
+  const base=slug(current.a.situs_addr_line_1||current.pin)+'-homeroots';
+  if(b.dataset.x==='md') dl(base+'.md', reportMD(current), 'text/markdown');
+  if(b.dataset.x==='json') dl(base+'.json', JSON.stringify({generated:current.when, parcel:current.a, geometry:current.feat.geometry, subdivisions:current.subs, lineage:current.hists, mapNames:current.names}, null, 2), 'application/json');
+  if(b.dataset.x==='print'){ const w=window.open('', '_blank'); if(w){ w.document.write(reportHTML(current)); w.document.close(); } else dl(base+'.html', reportHTML(current), 'text/html'); }
+  if(b.dataset.x==='link'){ const url=location.origin+location.pathname+'#'+encodeURIComponent(fmtPIN(current.pin)); const done=()=>{ b.textContent='Link copied'; setTimeout(()=>b.textContent='Copy link',1800); };
+    (navigator.clipboard?.writeText(url)||Promise.reject()).then(done).catch(()=>{ prompt('Copy this link', url); }); }
+});
 
 document.getElementById('searchForm').addEventListener('submit', e=>{ e.preventDefault(); lookup($('#q').value); });
 document.querySelectorAll('.hint a[data-q]').forEach(a=> a.addEventListener('click', e=>{ e.preventDefault(); $('#q').value = a.dataset.q; lookup(a.dataset.q); }));
