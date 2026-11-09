@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HomeRoots</title>
+<meta name="description" content="Trace the land history of any address or parcel in Highland Park and Highwood, Illinois, over georeferenced historical maps.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/vendor.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/leaflet.distortableimage.css">
+<style>
+/* Layout: fixed left research panel (the "abstract"), map fills the rest; stacks on phones. */
+:root{
+  --bg:#eef1f3; --panel:#ffffff; --ink:#1d262d; --ink-2:#56626b; --rule:#d5dbe0;
+  --plat:#b4322a; --plat-soft:#f6e3e1; --survey:#2d5f8b; --survey-soft:#e1ebf4;
+  --ok:#2f7a4a; --warn:#b07a16; --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,sans-serif;
+  --serif:"Libre Caslon Text",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#151a1e; --panel:#1e252b; --ink:#e8ecef; --ink-2:#9aa6ae; --rule:#303a42;
+  --plat:#e0645b; --plat-soft:#3a2321; --survey:#7fb1dc; --survey-soft:#1f3042; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#151a1e; --panel:#1e252b; --ink:#e8ecef; --ink-2:#9aa6ae; --rule:#303a42;
+  --plat:#e0645b; --plat-soft:#3a2321; --survey:#7fb1dc; --survey-soft:#1f3042; color-scheme:dark }
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans);display:grid;grid-template-columns:420px 1fr;grid-template-rows:100%}
+#panel{background:var(--panel);border-right:1px solid var(--rule);overflow-y:auto;min-width:0;padding-block:0 24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:16px}
+#map{position:relative;min-width:0;min-height:0}
+#leaflet{position:absolute;inset:0}
+header{padding-block:20px 12px;border-bottom:1px solid var(--rule);margin-bottom:14px}
+h1{font:700 26px/1.1 var(--serif);margin:0 0 2px;letter-spacing:-.01em}
+.sub{color:var(--ink-2);font-size:12.5px;margin:0}
+.search{display:flex;gap:8px;margin-top:14px}
+.search input{flex:1;min-width:0;font:14px var(--sans);padding:9px 11px;border:1px solid var(--rule);border-radius:6px;background:var(--bg);color:var(--ink)}
+.search button,button.btn{font:500 13px var(--sans);padding:9px 13px;border:0;border-radius:6px;background:var(--plat);color:#fff;cursor:pointer}
+button.btn.quiet{background:transparent;color:var(--survey);border:1px solid var(--rule)}
+button:focus-visible,input:focus-visible{outline:2px solid var(--survey);outline-offset:1px}
+.hint{font-size:12px;color:var(--ink-2);margin:8px 0 0}
+.hint a{color:var(--survey)}
+#status{font-size:12.5px;color:var(--ink-2);margin:10px 0 0;min-height:1.2em}
+#status.err{color:var(--plat)}
+section.card{border-top:1px solid var(--rule);padding-block:14px 4px}
+.timeline li.hit{background:var(--survey-soft);border-radius:6px;padding:6px 8px;margin-left:-8px}
+.story{background:var(--survey-soft);border-radius:8px;padding:12px 14px;margin:8px 0 4px;font-size:13.5px;max-height:55vh;overflow:auto;-webkit-overflow-scrolling:touch}
+.story p{margin:0 0 8px}.story p:last-child{margin:0}
+.story .meta{font:500 10.5px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);margin-bottom:6px}
+.keyrow{display:flex;gap:6px;margin-top:6px}.keyrow input{flex:1;min-width:0;font:12.5px var(--mono);padding:6px 8px;border:1px solid var(--rule);border-radius:5px;background:var(--bg);color:var(--ink)}
+.exportbar{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 2px}
+.exportbar button{font:500 12px var(--sans);padding:6px 10px;border-radius:5px;border:1px solid var(--rule);background:transparent;color:var(--survey);cursor:pointer}
+.exportbar button.primary{background:var(--survey);color:#fff;border-color:var(--survey)}
+section.card h2{font:700 16px/1.2 var(--serif);margin:0 0 8px}
+.eyebrow{font:500 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.addr{font:700 22px/1.15 var(--serif);margin:4px 0 2px;text-wrap:balance}
+.pin{font:500 15px var(--mono);color:var(--survey)}
+dl{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;margin:8px 0}
+dt{color:var(--ink-2);font-size:12.5px}
+dd{margin:0;font-variant-numeric:tabular-nums;min-width:0;overflow-wrap:anywhere}
+.mono{font-family:var(--mono);font-size:12.5px}
+.chip{display:inline-block;font:500 11px var(--mono);padding:1px 7px;border-radius:999px;border:1px solid var(--rule);color:var(--ink-2);margin-left:6px;vertical-align:middle}
+.chip.read{border-color:var(--warn);color:var(--warn)}
+.chip.confirmed{border-color:var(--ok);color:var(--ok)}
+.chip.inferred{border-color:var(--ink-2)}
+.timeline{list-style:none;margin:6px 0 0;padding:0;border-left:2px solid var(--rule)}
+.timeline li{position:relative;padding:0 0 10px 16px}
+.timeline li::before{content:"";position:absolute;left:-6px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--panel);border:2px solid var(--survey)}
+.timeline .yr{font:500 12px var(--mono);color:var(--survey)}
+.timeline .nm{font-weight:600}
+.timeline .nt{color:var(--ink-2);font-size:12.5px}
+.links{list-style:none;padding:0;margin:6px 0 0;display:grid;gap:6px}
+.links a{color:var(--survey);text-decoration:none;border-bottom:1px solid var(--rule)}
+.links a:hover{border-color:var(--survey)}
+.links small{display:block;color:var(--ink-2)}
+details summary{cursor:pointer;color:var(--survey);font-weight:500}
+table.names{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:6px}
+table.names th,table.names td{text-align:left;padding:4px 6px;border-bottom:1px solid var(--rule);vertical-align:top}
+table.names th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.addrow{display:grid;grid-template-columns:70px 1fr 90px;gap:6px;margin-top:8px}
+.addrow input,.addrow select{font:12.5px var(--sans);padding:6px 8px;border:1px solid var(--rule);border-radius:5px;background:var(--bg);color:var(--ink);min-width:0}
+.addrow .full{grid-column:1/-1;display:flex;gap:6px}
+.addrow .full input{flex:1}
+.welcome p{margin:6px 0}
+.welcome ul{margin:6px 0;padding-left:18px}
+/* Layers panel on the map */
+#layers{position:absolute;top:12px;right:12px;z-index:1000;width:300px;max-width:calc(100% - 24px);background:var(--panel);border:1px solid var(--rule);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.14);font-size:13px;max-height:calc(100% - 24px);overflow:auto}
+#layers h3{font:500 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin:0;padding:10px 12px 6px}
+#layers .grp{padding:0 12px 8px;border-bottom:1px solid var(--rule)}
+#layers .grp:last-child{border-bottom:0}
+.lyr{display:grid;grid-template-columns:20px 1fr auto;gap:6px 8px;align-items:center;padding:4px 0}
+.lyr label{cursor:pointer}
+.lyr .yr{font:500 11px var(--mono);color:var(--ink-2)}
+.lyr input[type=range]{grid-column:2/4;width:100%;accent-color:var(--survey);margin:0 0 2px}
+.lyr .tools{grid-column:2/4;display:flex;gap:6px;flex-wrap:wrap}
+.lyr .tools button{font:500 11px var(--sans);padding:3px 8px;border-radius:4px;border:1px solid var(--rule);background:transparent;color:var(--survey);cursor:pointer}
+.lyr .tools button.on{background:var(--survey);color:#fff;border-color:var(--survey)}
+#yearrow{display:flex;gap:8px;align-items:center;padding:4px 0}
+#yearrow input{flex:1;accent-color:var(--plat)}
+#yearrow output{font:500 12px var(--mono);min-width:3.2em;text-align:right}
+#toggleLayers{position:absolute;top:12px;right:12px;z-index:1001;display:none}
+.leaflet-container{font:inherit;background:var(--bg)}
+.leaflet-container a{color:var(--survey)}
+.leaflet-bar a{color:var(--ink)}
+.ldi-toolbar{z-index:1001}
+@media (max-width:860px){
+  body{grid-template-columns:1fr;grid-template-rows:52vh 1fr}
+  #map{order:-1;height:52vh}
+  #panel{border-right:0;border-top:1px solid var(--rule);padding-right:max(16px,env(safe-area-inset-right,0px))}
+  #layers{display:none}
+  #layers.open{display:block}
+  #toggleLayers{display:block}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<aside id="panel">
+  <header>
+    <h1>HomeRoots</h1>
+    <p class="sub">An ancestry for your home. Highland Park &amp; Highwood, Illinois.</p>
+    <form class="search" id="searchForm">
+      <input id="q" type="search" placeholder="Address or parcel number (PIN)" autocomplete="off" aria-label="Address or PIN" value="720 Ravinia Glen Pl">
+      <button type="submit">Trace</button>
+    </form>
+    <p class="hint">Try <a href="#" data-q="720 Ravinia Glen Pl">720 Ravinia Glen Pl</a>, <a href="#" data-q="326 Central Ave Highland Park">326 Central Ave</a>, <a href="#" data-q="17 Highwood Ave Highwood">17 Highwood Ave</a>, or a PIN such as <a href="#" data-q="16-36-307-090">16-36-307-090</a>.</p>
+    <p id="status" aria-live="polite"></p>
+  </header>
+  <div id="result">
+    <section class="card welcome">
+      <h2>How to read your home's ancestry</h2>
+      <p>Enter an address. HomeRoots looks up its parcel at Lake County, outlines it on the map, decodes the survey grid it sits in, finds the recorded subdivision and earlier parcels, and stacks the names written on historical maps of that section.</p>
+      <ul>
+        <li><strong>Parcel / PIN</strong>: today's tax lot. The 10-digit number encodes township, section and quarter-section.</li>
+        <li><strong>Subdivision (plat)</strong>: the recorded drawing that carved a farm into lots.</li>
+        <li><strong>Section-Township-Range</strong>: the 1830s federal survey grid every old map shares.</li>
+        <li><strong>Chain of title</strong>: the ordered list of owners, proven by deeds and abstracts.</li>
+      </ul>
+      <p>Use the layer panel on the map to fade the modern lot over the 1870s county map, Rudolph's 1909 map, the 1925 Windes &amp; Marsh map, the 1939 aerial and the county's 1996&ndash;2024 parcel history. The three scans are georeferenced to the county's section corners (within about 20 m). Press <em>Adjust placement</em> if you want to fine-tune one. Placements are saved in this browser and can be exported.</p>
+    </section>
+  </div>
+</aside>
+<main id="map">
+  <div id="leaflet" role="application" aria-label="Map"></div>
+  <button class="btn quiet" id="toggleLayers" type="button">Layers</button>
+  <div id="layers">
+    <h3>Base</h3>
+    <div class="grp" id="baseGrp"></div>
+    <h3>Historical maps</h3>
+    <div class="grp" id="histGrp"></div>
+    <h3>County records</h3>
+    <div class="grp" id="countyGrp"></div>
+    <h3>Your own map</h3>
+    <div class="grp">
+      <div class="lyr" style="display:block">
+        <label for="addMap" style="color:var(--survey)">Add a scanned map (JPG or PNG), then drag its corners into place</label>
+        <input id="addMap" type="file" accept="image/*" style="font-size:12px;display:block;margin:6px 0">
+        <div class="tools"><button type="button" id="exportPl">Export placements</button><label><input type="file" id="importPl" accept="application/json" hidden><button type="button" onclick="document.getElementById('importPl').click()">Import</button></label></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/esri-leaflet/3.0.12/esri-leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/vendor.js"></script>
+<script src="https://unpkg.com/leaflet-distortableimage@0.21.9/dist/leaflet.distortableimage.js"></script>
+<script>
+/* ---------- Services ---------- */
+const SVC = {
+  parcels: 'https://maps.lakecountyil.gov/arcgis/rest/services/GISMapping/WABParcels/MapServer',
+  parcelInfo: 'https://maps.lakecountyil.gov/arcgis/rest/services/GISMapping/WABParcels/MapServer/12/query',
+  subdivisions: 'https://maps.lakecountyil.gov/arcgis/rest/services/CCAO/TaxParcelViewer/MapServer/13/query',
+  historic: 'https://maps.lakecountyil.gov/arcgis/rest/services/CCAO/HistoricParcels/MapServer',
+  historicQ: 'https://maps.lakecountyil.gov/arcgis/rest/services/CCAO/HistoricParcels/MapServer/0/query',
+  geocode: 'https://maps.lakecountyil.gov/arcgis/rest/services/AddressLocators/LakeCountyCompositeLocator/GeocodeServer/findAddressCandidates',
+  aerialTiles: 'https://tiles.arcgis.com/tiles/HESxeTbDliKKvec2/arcgis/rest/services/aerial{YEAR}/MapServer/tile/{z}/{y}/{x}',
+  sections: 'https://maps.lakecountyil.gov/arcgis/rest/services/GISMapping/WABSurvey/MapServer/3/query'
+};
+const FIELDS = 'PIN,situs_addr_line_1,situs_addr_city,TOWN,RANGE,SECT,legdesc1,legdesc2,legdesc3,improve_year_built,sale_date1,sale_amt1,sale_date2,sale_amt2,doc_num1,doc_num2,lot_area_acres,MUNI_NAME,TOWNSHIPNAME,nghbr_desc,ZONING,stories,bedroom_count,const_type,class_desc_pardat,USGS_QUAD';
+
+/* ---------- Scanned maps: image, rough corners (NW, NE, SW, SE), notes ---------- */
+const SCANS = [
+  { id:'lc1870s', year:'c. 1873', title:'Lake County landowner map (Vernon & Deerfield Twps)', src:'maps/lake_county_1870s.jpg',
+    corners:[[42.28188, -87.98102], [42.28064, -87.73884], [42.13677, -87.9838], [42.13553, -87.74162]],
+    note:'Shows the Chicago, Milwaukee & St. Paul line, so after c. 1872. Landowner names per tract.' },
+  { id:'rudolph1909r', year:'1909', title:"Rudolph's Map of Highland Park", src:'maps/rudolph_1909.jpg',
+    corners:[[42.2237, -87.83251], [42.2234, -87.76294], [42.15576, -87.83385], [42.15522, -87.76474]],
+    note:'David Rumsey Map Collection scan (List No. 10650.004), half resolution; aligned to the county section grid' },
+  { id:'windes1925', year:'1925', title:'Windes & Marsh Map of Highland Park and Vicinity', src:'maps/windes_marsh_1925.jpg',
+    corners:[[42.22103, -87.83543], [42.22058, -87.7508], [42.13952, -87.83684], [42.13907, -87.75221]],
+    note:'Compiled for McGuire & Orr. Acreage owners, subdivisions and agents on the eve of annexation.' }
+];
+
+/* ---------- Names transcribed from maps, by section (T43N R12E). Add your own in the panel. ---------- */
+const SEED_NAMES = [
+  {trs:'43-12-36', year:'c. 1873', name:'Geo. Hessler', note:'West of the C&NW tracks, near county line', conf:'read', src:'Lake County map c.1873'},
+  {trs:'43-12-36', year:'c. 1873', name:'C. Rudolph', note:'Adjoining Hessler', conf:'read', src:'Lake County map c.1873'},
+  {trs:'43-12-36', year:'c. 1873', name:'S. Meyers', note:'', conf:'read', src:'Lake County map c.1873'},
+  {trs:'43-12-36', year:'c. 1873', name:'Thos. Daggitt; R. Daggitt', note:'Daggitt farm; later Ravinia Park site', conf:'read', src:'Lake County map c.1873'},
+  {trs:'43-12-36', year:'1843', name:'Robert Daggitt', note:'Federal patent for the SE ¼ (160 acres), the Ravinia Park side of the section; family cemetery 1845. See the land-sales card for the full section.', conf:'confirmed', src:'GLO patent STA-IL0860__.490; Daily Herald 2020'},
+  {trs:'43-12-36', year:'1909', name:'Geo. Hesler', note:'Two acreage parcels west of tracks', conf:'read', src:"Rudolph's Map 1909"},
+  {trs:'43-12-36', year:'1909', name:'Jos. Daggitt; Edith Bordwell; Mary Reid; Hannah Garland; C. Timmerman; H.C. Lytton', note:'Neighboring tracts', conf:'read', src:"Rudolph's Map 1909"},
+  {trs:'43-12-36', year:'1925', name:'Geo. Hessler, 26 acres', note:'Still farming at ~86', conf:'read', src:'Windes & Marsh 1925'},
+  {trs:'43-12-36', year:'1925', name:'R.W. Stevens; Henry Kelly (4 ac); W.A. Covington (10 ac); Murray & Terry, Agents', note:'Farmland passing to agents for lots', conf:'read', src:'Windes & Marsh 1925'},
+  {trs:'43-12-36', year:'1932', name:'George Hessler d. Dec 22, 1932', note:'"Pioneer settler", arrived c. 1848', conf:'confirmed', src:'HP Press via HPPL index'},
+  {trs:'43-12-35', year:'1909', name:'Fred Clavey; H.J. Kolar; Earth Bordwell; Geo. Hesler (90 ac)', note:'Farms along Clavey Rd', conf:'read', src:"Rudolph's Map 1909"},
+  {trs:'43-12-35', year:'1925', name:'Fred Clavey; Henry Denning; Wm. Krumbach; Northmoor Country Club', note:'', conf:'read', src:'Windes & Marsh 1925'},
+  {trs:'43-12-34', year:'1925', name:'William Recktenwald; Delmer M. Blasier; Louis Suelter; Carsten Nickelson; H.A. Parson', note:'Skokie Valley farms', conf:'read', src:'Windes & Marsh 1925'},
+  {trs:'43-12-27', year:'1909', name:'Patrick Sheahan; John Mooney; Jacob Martin; Charles Ludwig; Edward Miller', note:'', conf:'read', src:"Rudolph's Map 1909"},
+  {trs:'43-12-26', year:'1925', name:'Walker W. Ross; Genevieve Dennersberger; L.M. Williams; Wm. D. Monroe; Bob O\'Link Golf Club', note:'', conf:'read', src:'Windes & Marsh 1925'},
+  {trs:'43-12-22', year:'1925', name:'Geo. J. Williams; H.A. Fonda; E.A. Bournique; Exmoor Club; Michael Sweeney Estate', note:'', conf:'read', src:'Windes & Marsh 1925'},
+  {trs:'43-12-14', year:'1909', name:'Fort Sheridan Reservation', note:'Absorbed the lost town of St. Johns', conf:'confirmed', src:'Rudolph 1909; Cushing'},
+];
+
+/* ---------- State ---------- */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem('homeroots:'+k); return v?JSON.parse(v):d }catch(e){ return d } },
+  set(k, v){ try{ localStorage.setItem('homeroots:'+k, JSON.stringify(v)) }catch(e){} }
+};
+let userNames = store.get('names', []);
+let placements = store.get('placements2', {});
+let current = null;
+
+/* ---------- Map ---------- */
+const map = L.map('leaflet', { zoomControl:true }).setView([42.1835, -87.80], 13);
+const bases = {
+  osm: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Esri World Street Map' }),
+  topo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Esri World Topo' }),
+  img: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Esri World Imagery' })
+};
+bases.topo.addTo(map);
+
+const parcelLines = L.esri.dynamicMapLayer({ url:SVC.parcels, layers:[11], opacity:.55, attribution:'Lake County GIS' });
+const historicParcels = L.esri.dynamicMapLayer({ url:SVC.historic, layers:[0], opacity:.9, attribution:'Lake County CCAO' });
+let histYear = 2000;
+function setHistYear(y){ histYear = y; const from = new Date(Date.UTC(y,0,1)), to = new Date(Date.UTC(y,11,31)); historicParcels.setTimeRange(from, to); }
+setHistYear(histYear);
+const AERIALS = [['1939','1939'],['1946','1946'],['1961','1961'],['1980cir','1980']];
+const aerialLayers = Object.fromEntries(AERIALS.map(([k,y])=>[k, L.tileLayer(SVC.aerialTiles.replace('{YEAR}',k), { maxNativeZoom:19, maxZoom:21, attribution:`${y} aerial, Lake County GIS` })]));
+L.control.scale({ imperial:true }).addTo(map);
+
+const parcelLayer = L.geoJSON(null, { style:{ color:'#b4322a', weight:3, fillOpacity:.08 } }).addTo(map);
+const scanLayers = {};
+
+function cornersFor(s){ const p = placements[s.id]; return (p||s.corners).map(c=>L.latLng(c[0],c[1])); }
+function addScan(s){
+  const img = L.distortableImageOverlay(s.src, { corners: cornersFor(s), selected:false, editable:false, mode:'distort', actions:[L.FreeRotateAction, L.DistortAction, L.ScaleAction, L.DragAction, L.LockAction, L.OpacityAction] });
+  img.on('edit', ()=> savePlacement(s.id, img));
+  img.on('dragend', ()=> savePlacement(s.id, img));
+  scanLayers[s.id] = img; return img;
+}
+function savePlacement(id, img){ try{ placements[id] = img.getCorners().map(c=>[+c.lat.toFixed(6), +c.lng.toFixed(6)]); store.set('placements2', placements) }catch(e){} }
+SCANS.forEach(addScan);
+
+/* Layer UI */
+function layerRow(group, opts){
+  const row = document.createElement('div'); row.className='lyr';
+  const id = 'ly_'+opts.id;
+  row.innerHTML = `<input type="checkbox" id="${id}" ${opts.on?'checked':''}><label for="${id}">${opts.title}</label><span class="yr">${opts.year||''}</span>` +
+    (opts.opacity?`<input type="range" min="0" max="100" value="${Math.round((opts.startOpacity??1)*100)}" aria-label="Opacity of ${opts.title}">`:'') +
+    (opts.tools?`<div class="tools">${opts.tools}</div>`:'');
+  group.appendChild(row);
+  const cb = row.querySelector('input[type=checkbox]');
+  cb.addEventListener('change', ()=> opts.toggle(cb.checked));
+  const rg = row.querySelector('input[type=range]'); if(rg) rg.addEventListener('input', ()=> opts.setOpacity(rg.value/100));
+  return row;
+}
+const baseGrp = document.getElementById('baseGrp'), histGrp = document.getElementById('histGrp'), countyGrp = document.getElementById('countyGrp');
+(function(){
+  const r = document.createElement('div'); r.className='lyr'; r.style.gridTemplateColumns='1fr';
+  r.innerHTML = `<label><input type="radio" name="base" value="topo" checked> Topographic (Esri)</label><label><input type="radio" name="base" value="osm"> Streets (Esri)</label><label><input type="radio" name="base" value="img"> Satellite (Esri)</label>`;
+  baseGrp.appendChild(r);
+  r.querySelectorAll('input').forEach(i=> i.addEventListener('change', ()=>{ Object.values(bases).forEach(b=>map.removeLayer(b)); bases[i.value].addTo(map).bringToBack(); }));
+})();
+SCANS.forEach(s=>{
+  const row = layerRow(histGrp, { id:s.id, title:s.title, year:s.year, on:false, opacity:true, startOpacity:.75,
+    toggle:on=>{ let l=scanLayers[s.id]; if(on){ if(l){ try{ if(l.editing&&l.editing.enabled()) l.editing.disable(); map.removeLayer(l); l.off(); if(l._image) l._image.onload=l._image.onerror=null }catch(e){} } l = addScan(s); l.addTo(map); const op=+row.querySelector('input[type=range]').value/100; l.once('load', ()=>l.setOpacity?.(op)); l.setOpacity?.(op) } else { try{ if(l.editing&&l.editing.enabled()) l.editing.disable(); map.removeLayer(l) }catch(e){} } },
+    setOpacity:v=> scanLayers[s.id].setOpacity(v),
+    tools:`<button type="button" data-adj="${s.id}">Adjust placement</button><button type="button" data-reset="${s.id}">Reset</button><button type="button" data-fit="${s.id}">Zoom to</button>` });
+  row.title = s.note;
+});
+AERIALS.forEach(([k,y])=>{ const ly = aerialLayers[k]; layerRow(histGrp, { id:'a'+k, title: k==='1980cir'?'Aerial photography (color infrared)':'Aerial photography', year:y, on:false, opacity:true, toggle:on=> on?ly.addTo(map):map.removeLayer(ly), setOpacity:v=>ly.setOpacity(v) }); });
+layerRow(countyGrp, { id:'plines', title:'Current tax parcel lines', year:'2025', on:true, opacity:false, toggle:on=> on?parcelLines.addTo(map):map.removeLayer(parcelLines) });
+parcelLines.addTo(map);
+layerRow(countyGrp, { id:'hparc', title:'Historic tax parcels', year:'1996–2024', on:false, opacity:true, toggle:on=> on?historicParcels.addTo(map):map.removeLayer(historicParcels), setOpacity:v=>historicParcels.setOpacity(v),
+  tools:`<div id="yearrow" style="width:100%"><input type="range" id="hyear" min="1996" max="2024" value="${histYear}" aria-label="Historic parcel year"><output id="hyearOut">${histYear}</output></div>` });
+document.getElementById('hyear').addEventListener('input', e=>{ setHistYear(+e.target.value); document.getElementById('hyearOut').value = e.target.value; });
+
+document.getElementById('layers').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  if(b.dataset.adj){ const l = scanLayers[b.dataset.adj]; if(!map.hasLayer(l)){ document.getElementById('ly_'+b.dataset.adj).click(); }
+    const on = !(l.editing && l.editing.enabled()); if(on){ l.editing.enable(); l.select?.(); } else { l.editing.disable(); l.deselect?.(); }
+    b.classList.toggle('on', on); b.textContent = on?'Done adjusting':'Adjust placement'; }
+  if(b.dataset.reset){ const s = SCANS.find(x=>x.id===b.dataset.reset); delete placements[s.id]; store.set('placements2', placements); const l = scanLayers[s.id]; l.setCorners?.(s.corners.map(c=>L.latLng(c[0],c[1]))); }
+  if(b.dataset.fit){ const l = scanLayers[b.dataset.fit]; if(!map.hasLayer(l)) document.getElementById('ly_'+b.dataset.fit).click(); map.fitBounds(L.latLngBounds(l.getCorners())); }
+});
+document.getElementById('toggleLayers').addEventListener('click', ()=> document.getElementById('layers').classList.toggle('open'));
+document.getElementById('exportPl').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify({placements, userNames}, null, 2)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'homeroots-placements.json'; a.click();
+});
+document.getElementById('importPl').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return; const r = new FileReader();
+  r.onload = ()=>{ try{ const d = JSON.parse(r.result); if(d.placements){ placements = d.placements; store.set('placements2', placements); Object.keys(placements).forEach(id=>{ const l=scanLayers[id]; if(l) l.setCorners?.(placements[id].map(c=>L.latLng(c[0],c[1]))); }); } if(d.userNames){ userNames = d.userNames; store.set('names', userNames); } setStatus('Placements imported.'); }catch(err){ setStatus('That file is not a HomeRoots export.', true) } };
+  r.readAsText(f);
+});
+document.getElementById('addMap').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return; const url = URL.createObjectURL(f);
+  const c = map.getCenter(), d = 0.02;
+  const s = { id:'user_'+Date.now(), year:'', title:f.name.replace(/\.[^.]+$/,''), src:url, corners:[[c.lat+d,c.lng-d],[c.lat+d,c.lng+d],[c.lat-d,c.lng-d],[c.lat-d,c.lng+d]], note:'Your upload' };
+  SCANS.push(s); const l = addScan(s); l.addTo(map); l.editing.enable();
+  layerRow(histGrp, { id:s.id, title:s.title, year:'yours', on:true, opacity:true, startOpacity:.75, toggle:on=>{ let l=scanLayers[s.id]; if(on){ if(l){ try{ map.removeLayer(l); l.off(); if(l._image) l._image.onload=l._image.onerror=null }catch(e){} } l=addScan(s); l.addTo(map) } else { try{ if(l.editing&&l.editing.enabled()) l.editing.disable(); map.removeLayer(l) }catch(e){} } }, setOpacity:v=>scanLayers[s.id].setOpacity(v), tools:`<button type="button" data-adj="${s.id}" class="on">Done adjusting</button><button type="button" data-fit="${s.id}">Zoom to</button>` });
+});
+
+
+/* ---------- Federal land patents, T43N R12E (BLM GLO Records, harvested Nov 2026) ---------- */
+const PATENTS = [{"doc": "10036", "acc": "STA-IL0900__.037", "date": "1843-03-10", "names": ["PATRICK CARROL"], "parcels": [{"sec": 5, "al": "NESW"}]}, {"doc": "10376", "acc": "STA-IL0900__.374", "date": "1843-03-10", "names": ["MAGNUS TAIT"], "parcels": [{"sec": 10, "al": "NE"}]}, {"doc": "10476", "acc": "STA-IL0900__.464", "date": "1843-03-10", "names": ["DANIEL MCADAMS"], "parcels": [{"sec": 27, "al": "NENE"}]}, {"doc": "7145", "acc": "STA-IL0840__.495", "date": "1843-03-10", "names": ["LUDWIG GEISTFELDT"], "parcels": [{"sec": 29, "al": "SE"}]}, {"doc": "7146", "acc": "STA-IL0840__.496", "date": "1843-03-10", "names": ["JOHN DOSE", "JAMES MURRAY"], "parcels": [{"sec": 30, "al": "NW"}]}, {"doc": "7186", "acc": "STA-IL0880__.025", "date": "1843-03-10", "names": ["JESSE WILMOT"], "parcels": [{"sec": 32, "al": "W½SW"}]}, {"doc": "7702", "acc": "STA-IL0860__.046", "date": "1843-03-10", "names": ["CALEB CADWELL"], "parcels": [{"sec": 33, "al": "W½NW"}, {"sec": 28, "al": "W½SW"}]}, {"doc": "7753", "acc": "STA-IL0860__.096", "date": "1843-03-10", "names": ["JOHN RUDD"], "parcels": [{"sec": 4, "al": "1NE"}]}, {"doc": "7789", "acc": "STA-IL0860__.132", "date": "1843-03-10", "names": ["PHILIP COCKRANE"], "parcels": [{"sec": 9, "al": "E½SW"}]}, {"doc": "7791", "acc": "STA-IL0860__.134", "date": "1843-03-10", "names": ["MICHAEL MAHAN"], "parcels": [{"sec": 18, "al": "SE"}]}, {"doc": "7793", "acc": "STA-IL0860__.136", "date": "1843-03-10", "names": ["JAMES FAGAN", "LAWRENCE MASTERSON"], "parcels": [{"sec": 7, "al": "E½SE"}, {"sec": 8, "al": "W½SW"}]}, {"doc": "7799", "acc": "STA-IL0860__.142", "date": "1843-03-10", "names": ["BENJAMIN HASTINGS"], "parcels": [{"sec": 23, "al": "W½NW"}]}, {"doc": "7822", "acc": "STA-IL0860__.165", "date": "1843-03-10", "names": ["ANTHONY SULLIVAN"], "parcels": [{"sec": 10, "al": "W½SE"}]}, {"doc": "7846", "acc": "STA-IL0860__.189", "date": "1843-03-10", "names": ["ALVIN FOX"], "parcels": [{"sec": 14, "al": "W½SW"}]}, {"doc": "7851", "acc": "STA-IL0860__.194", "date": "1843-03-10", "names": ["MICHAEL DAVAN"], "parcels": [{"sec": 18, "al": "NE"}]}, {"doc": "8152", "acc": "STA-IL0860__.490", "date": "1843-03-10", "names": ["ROBERT DAGGIT"], "parcels": [{"sec": 36, "al": "SE"}]}, {"doc": "8153", "acc": "STA-IL0860__.491", "date": "1843-03-10", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 36, "al": "E½SW"}]}, {"doc": "8154", "acc": "STA-IL0860__.492", "date": "1843-03-10", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 31, "al": "E½NE"}]}, {"doc": "8155", "acc": "STA-IL0860__.493", "date": "1843-03-10", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 20, "al": "E½NW"}]}, {"doc": "8158", "acc": "STA-IL0870__.003", "date": "1843-03-10", "names": ["JESSE WILMOT"], "parcels": [{"sec": 32, "al": "E½SW"}]}, {"doc": "8159", "acc": "STA-IL0870__.004", "date": "1843-03-10", "names": ["JESSE WILMOT"], "parcels": [{"sec": 20, "al": "W½SW"}]}, {"doc": "8160", "acc": "STA-IL0870__.005", "date": "1843-03-10", "names": ["LYMAN WILMOT"], "parcels": [{"sec": 32, "al": "W½NW"}]}, {"doc": "8161", "acc": "STA-IL0880__.011", "date": "1843-03-10", "names": ["LYMAN WILMOT"], "parcels": [{"sec": 19, "al": "E½SE"}]}, {"doc": "8163", "acc": "STA-IL0870__.007", "date": "1843-03-10", "names": ["ANDRUS COOK"], "parcels": [{"sec": 31, "al": "NW"}]}, {"doc": "8164", "acc": "STA-IL0870__.008", "date": "1843-03-10", "names": ["BENJAMIN F FRIDLEY"], "parcels": [{"sec": 30, "al": "W½SE"}]}, {"doc": "8165", "acc": "STA-IL0870__.009", "date": "1843-03-10", "names": ["DANIEL MCCORMICK"], "parcels": [{"sec": 17, "al": "E½SE"}]}, {"doc": "8166", "acc": "STA-IL0870__.010", "date": "1843-03-10", "names": ["JAMES FENNERTY"], "parcels": [{"sec": 22, "al": "NE"}]}, {"doc": "8167", "acc": "STA-IL0870__.011", "date": "1843-03-10", "names": ["JOHN FENNERTY"], "parcels": [{"sec": 23, "al": "E½SE"}]}, {"doc": "8168", "acc": "STA-IL0870__.012", "date": "1843-03-10", "names": ["JOHN FENNERTY"], "parcels": [{"sec": 24, "al": "NW"}, {"sec": 24, "al": "SW"}]}, {"doc": "8169", "acc": "STA-IL0870__.013", "date": "1843-03-10", "names": ["PETER FENNERTY"], "parcels": [{"sec": 23, "al": "W½SE"}, {"sec": 23, "al": "E½SW"}]}, {"doc": "8171", "acc": "STA-IL0870__.015", "date": "1843-03-10", "names": ["JOHN KING"], "parcels": [{"sec": 9, "al": "W½SE"}]}, {"doc": "8172", "acc": "STA-IL0870__.016", "date": "1843-03-10", "names": ["MICHAEL MAHAN"], "parcels": [{"sec": 19, "al": "1NW"}]}, {"doc": "8173", "acc": "STA-IL0870__.017", "date": "1843-03-10", "names": ["MICHAEL DULANTY"], "parcels": [{"sec": 4, "al": "2NW"}]}, {"doc": "8176", "acc": "STA-IL0870__.020", "date": "1843-03-10", "names": ["ARTHUR JOHNSON"], "parcels": [{"sec": 30, "al": "E½NE"}]}, {"doc": "8177", "acc": "STA-IL0870__.021", "date": "1843-03-10", "names": ["OWEN CARROLL"], "parcels": [{"sec": 19, "al": "W½NE"}]}, {"doc": "8178", "acc": "STA-IL0870__.022", "date": "1843-03-10", "names": ["MICHAEL YORE"], "parcels": [{"sec": 7, "al": "1SW"}]}, {"doc": "8179", "acc": "STA-IL0870__.023", "date": "1843-03-10", "names": ["MICHAEL YORE"], "parcels": [{"sec": 7, "al": "W½SE"}]}, {"doc": "8180", "acc": "STA-IL0870__.024", "date": "1843-03-10", "names": ["JOHN COCRANE"], "parcels": [{"sec": 36, "al": "NW"}]}, {"doc": "8181", "acc": "STA-IL0870__.025", "date": "1843-03-10", "names": ["PHILEMON CADWELL"], "parcels": [{"sec": 29, "al": "E½NE"}]}, {"doc": "8182", "acc": "STA-IL0870__.026", "date": "1843-03-10", "names": ["PATRICK BOYLAN"], "parcels": [{"sec": 7, "al": "E½NE"}]}, {"doc": "8183", "acc": "STA-IL0870__.027", "date": "1843-03-10", "names": ["MICHAEL BANNAN"], "parcels": [{"sec": 25, "al": "SW"}]}, {"doc": "8184", "acc": "STA-IL0870__.028", "date": "1843-03-10", "names": ["DANIEL QUIGLEY"], "parcels": [{"sec": 35, "al": "E½NE"}]}, {"doc": "8185", "acc": "STA-IL0870__.029", "date": "1843-03-10", "names": ["JOHN MCCARTY"], "parcels": [{"sec": 7, "al": "1NW"}]}, {"doc": "8186", "acc": "STA-IL0870__.030", "date": "1843-03-10", "names": ["BENJAMIN MARKS", "ROBERT MARKS"], "parcels": [{"sec": 3, "al": "NE"}]}, {"doc": "8187", "acc": "STA-IL0870__.031", "date": "1843-03-10", "names": ["ROBERT MARKS"], "parcels": [{"sec": 3, "al": "SE"}]}, {"doc": "8188", "acc": "STA-IL0870__.032", "date": "1843-03-10", "names": ["MAGNUS TAIT"], "parcels": [{"sec": 11, "al": "NW"}, {"sec": 11, "al": "SW"}]}, {"doc": "8189", "acc": "STA-IL0870__.033", "date": "1843-03-10", "names": ["CONRAD HYRE"], "parcels": [{"sec": 33, "al": "E½SW"}]}, {"doc": "8190", "acc": "STA-IL0870__.034", "date": "1843-03-10", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 17, "al": "W½NW"}]}, {"doc": "8193", "acc": "STA-IL0870__.037", "date": "1843-03-10", "names": ["JESSE H LEAVENWORTH"], "parcels": [{"sec": 31, "al": "E½SE"}]}, {"doc": "8200", "acc": "STA-IL0870__.044", "date": "1843-03-10", "names": ["PATRICK CARLIN"], "parcels": [{"sec": 19, "al": "E½NE"}]}, {"doc": "8201", "acc": "STA-IL0870__.045", "date": "1843-03-10", "names": ["PATRICK HICKEY", "CHARLES MCDONNELL"], "parcels": [{"sec": 18, "al": "2SW"}]}, {"doc": "8205", "acc": "STA-IL0870__.049", "date": "1843-03-10", "names": ["MAGNUS TAIT"], "parcels": [{"sec": 10, "al": "E½NW"}]}, {"doc": "8223", "acc": "STA-IL0870__.067", "date": "1843-03-10", "names": ["PHILIP COCHRANE"], "parcels": [{"sec": 9, "al": "E½SE"}]}, {"doc": "8242", "acc": "STA-IL0870__.086", "date": "1843-03-10", "names": ["CORNELIUS DWYER"], "parcels": [{"sec": 7, "al": "2NW"}]}, {"doc": "8344", "acc": "STA-IL0870__.187", "date": "1843-03-10", "names": ["JOHN DOYLE"], "parcels": [{"sec": 5, "al": "S½SW"}]}, {"doc": "8360", "acc": "STA-IL0870__.203", "date": "1843-03-10", "names": ["EDWARD NOLAN"], "parcels": [{"sec": 6, "al": "W½NW"}]}, {"doc": "8367", "acc": "STA-IL0870__.210", "date": "1843-03-10", "names": ["JOHN MURPHY"], "parcels": [{"sec": 36, "al": "SENE"}]}, {"doc": "8374", "acc": "STA-IL0870__.217", "date": "1843-03-10", "names": ["JOHN FENNERTY"], "parcels": [{"sec": 25, "al": "NWNW"}]}, {"doc": "8375", "acc": "STA-IL0870__.218", "date": "1843-03-10", "names": ["JOHN FENNERTY"], "parcels": [{"sec": 26, "al": "NENE"}]}, {"doc": "8380", "acc": "STA-IL0870__.223", "date": "1843-03-10", "names": ["ANTHONY SULLIVAN"], "parcels": [{"sec": 15, "al": "NWNW"}]}, {"doc": "8391", "acc": "STA-IL0870__.234", "date": "1843-03-10", "names": ["JAMES LANCASTER"], "parcels": [{"sec": 7, "al": "W½NE"}]}, {"doc": "8417", "acc": "STA-IL0870__.260", "date": "1843-03-10", "names": ["JOHN BURKE"], "parcels": [{"sec": 18, "al": "NESW"}]}, {"doc": "8430", "acc": "STA-IL0870__.273", "date": "1843-03-10", "names": ["CHARLES MCDONNELL"], "parcels": [{"sec": 17, "al": "SENW"}, {"sec": 17, "al": "NESW"}]}, {"doc": "8433", "acc": "STA-IL0870__.276", "date": "1843-03-10", "names": ["JAMES FENNERTY"], "parcels": [{"sec": 25, "al": "NENW"}]}, {"doc": "8438", "acc": "STA-IL0870__.281", "date": "1843-03-10", "names": ["DANIEL BURKE"], "parcels": [{"sec": 9, "al": "NWNW"}]}, {"doc": "8444", "acc": "STA-IL0870__.287", "date": "1843-03-10", "names": ["WILLIAM R POWER"], "parcels": [{"sec": 30, "al": "N½SW"}]}, {"doc": "8456", "acc": "STA-IL0870__.300", "date": "1843-03-10", "names": ["ANN DONOVAN"], "parcels": [{"sec": 25, "al": "S½NW"}]}, {"doc": "8461", "acc": "STA-IL0870__.305", "date": "1843-03-10", "names": ["FRANCIS QUIN"], "parcels": [{"sec": 9, "al": "SWNW"}]}, {"doc": "8539", "acc": "STA-IL0870__.379", "date": "1843-03-10", "names": ["JOHN CLAUS"], "parcels": [{"sec": 14, "al": "NE"}, {"sec": 14, "al": "E½NW"}]}, {"doc": "8540", "acc": "STA-IL0870__.380", "date": "1843-03-10", "names": ["PATRICK KELLY"], "parcels": [{"sec": 6, "al": "SESW"}]}, {"doc": "8549", "acc": "STA-IL0870__.389", "date": "1843-03-10", "names": ["MICHAEL MOONEY"], "parcels": [{"sec": 3, "al": "NW"}]}, {"doc": "8559", "acc": "STA-IL0870__.399", "date": "1843-03-10", "names": ["JOHN MILLEN"], "parcels": [{"sec": 33, "al": "NWSE"}]}, {"doc": "8563", "acc": "STA-IL0870__.403", "date": "1843-03-10", "names": ["FRANCIS MCGOVERN"], "parcels": [{"sec": 22, "al": "SESE"}]}, {"doc": "8577", "acc": "STA-IL0870__.417", "date": "1843-03-10", "names": ["MARY E WARNER"], "parcels": [{"sec": 33, "al": "SWSE"}]}, {"doc": "8578", "acc": "STA-IL0870__.418", "date": "1843-03-10", "names": ["HORACE LAMB"], "parcels": [{"sec": 33, "al": "SWNE"}]}, {"doc": "8580", "acc": "STA-IL0870__.420", "date": "1843-03-10", "names": ["DANIEL BURKE"], "parcels": [{"sec": 4, "al": "SWSW"}]}, {"doc": "8585", "acc": "STA-IL0870__.425", "date": "1843-03-10", "names": ["JOHN CORCORAN"], "parcels": [{"sec": 26, "al": "W½SE"}]}, {"doc": "8593", "acc": "STA-IL0870__.433", "date": "1843-03-10", "names": ["CONRAD HYRE"], "parcels": [{"sec": 33, "al": "NWSW"}]}, {"doc": "8594", "acc": "STA-IL0870__.434", "date": "1843-03-10", "names": ["OWEN MONAGHAN"], "parcels": [{"sec": 18, "al": "N½1NW"}]}, {"doc": "8595", "acc": "STA-IL0870__.435", "date": "1843-03-10", "names": ["PATRICK DORSON"], "parcels": [{"sec": 18, "al": "S½1NW"}]}, {"doc": "8610", "acc": "STA-IL0870__.449", "date": "1843-03-10", "names": ["JAMES MAHAN"], "parcels": [{"sec": 15, "al": "E½SW"}]}, {"doc": "8618", "acc": "STA-IL0870__.457", "date": "1843-03-10", "names": ["CHARLES JINNINGS"], "parcels": [{"sec": 30, "al": "NESE"}]}, {"doc": "8651", "acc": "STA-IL0870__.490", "date": "1843-03-10", "names": ["FRANCIS GALLAUGHER"], "parcels": [{"sec": 26, "al": "W½SW"}]}, {"doc": "8655", "acc": "STA-IL0870__.494", "date": "1843-03-10", "names": ["HENRY WELSH"], "parcels": [{"sec": 23, "al": "SENW"}]}, {"doc": "8678", "acc": "STA-IL0880__.061", "date": "1843-03-10", "names": ["JESSE H LEAVENWORTH"], "parcels": [{"sec": 20, "al": "W½NW"}]}, {"doc": "8733", "acc": "STA-IL0880__.114", "date": "1843-03-10", "names": ["FRANCIS E PERIOLAT"], "parcels": [{"sec": 31, "al": "N½2SW"}]}, {"doc": "8734", "acc": "STA-IL0880__.115", "date": "1843-03-10", "names": ["JACOB OTT"], "parcels": [{"sec": 31, "al": "NESW"}]}, {"doc": "8810", "acc": "STA-IL0880__.188", "date": "1843-03-10", "names": ["JACOB OTT"], "parcels": [{"sec": 31, "al": "NWNE"}]}, {"doc": "8876", "acc": "STA-IL0880__.248", "date": "1843-03-10", "names": ["GEORGE STRUPLER"], "parcels": [{"sec": 31, "al": "S½1SW"}]}, {"doc": "8886", "acc": "STA-IL0880__.258", "date": "1843-03-10", "names": ["JOHN DOSE"], "parcels": [{"sec": 30, "al": "SWNE"}]}, {"doc": "8905", "acc": "STA-IL0880__.275", "date": "1843-03-10", "names": ["WILLIAM D KERR"], "parcels": [{"sec": 33, "al": "E½NE"}]}, {"doc": "8943", "acc": "STA-IL0880__.309", "date": "1843-03-10", "names": ["GEORGE LUTHER"], "parcels": [{"sec": 33, "al": "SENW"}]}, {"doc": "8956", "acc": "STA-IL0880__.322", "date": "1843-03-10", "names": ["CONRAD HYRE"], "parcels": [{"sec": 32, "al": "NESE"}]}, {"doc": "8957", "acc": "STA-IL0880__.323", "date": "1843-03-10", "names": ["ROBERT EDBROOKE"], "parcels": [{"sec": 33, "al": "SWSW"}]}, {"doc": "8959", "acc": "STA-IL0880__.325", "date": "1843-03-10", "names": ["SAMUEL MONROE"], "parcels": [{"sec": 33, "al": "NENW"}]}, {"doc": "8960", "acc": "STA-IL0880__.326", "date": "1843-03-10", "names": ["SAMUEL MONROE"], "parcels": [{"sec": 32, "al": "E½NE"}]}, {"doc": "8963", "acc": "STA-IL0880__.329", "date": "1843-03-10", "names": ["WILLIAM D KERR"], "parcels": [{"sec": 33, "al": "NWNW"}]}, {"doc": "8975", "acc": "STA-IL0880__.341", "date": "1843-03-10", "names": ["JOHN MATHEWS"], "parcels": [{"sec": 32, "al": "NWSE"}]}, {"doc": "8978", "acc": "STA-IL0880__.344", "date": "1843-03-10", "names": ["SAMUEL MONROE"], "parcels": [{"sec": 33, "al": "E½SE"}]}, {"doc": "8981", "acc": "STA-IL0880__.347", "date": "1843-03-10", "names": ["PHILEMAN CADWELL"], "parcels": [{"sec": 32, "al": "NWNE"}]}, {"doc": "8988", "acc": "STA-IL0880__.354", "date": "1843-03-10", "names": ["CHRISTIAN OTT"], "parcels": [{"sec": 20, "al": "NESW"}]}, {"doc": "8990", "acc": "STA-IL0880__.356", "date": "1843-03-10", "names": ["ANDRE MYERS"], "parcels": [{"sec": 32, "al": "SESE"}]}, {"doc": "8996", "acc": "STA-IL0880__.362", "date": "1843-03-10", "names": ["PHILIP SCHNAVLEY"], "parcels": [{"sec": 20, "al": "SESW"}]}, {"doc": "9039", "acc": "STA-IL0880__.404", "date": "1843-03-10", "names": ["LEWIS GEISTFELDT"], "parcels": [{"sec": 32, "al": "E½NW"}]}, {"doc": "9054", "acc": "STA-IL0880__.416", "date": "1843-03-10", "names": ["CAIN HIGGINS"], "parcels": [{"sec": 26, "al": "E½SE"}]}, {"doc": "9069", "acc": "STA-IL0880__.427", "date": "1843-03-10", "names": ["ROBERT P HAMILTON"], "parcels": [{"sec": 30, "al": "SESE"}]}, {"doc": "9081", "acc": "STA-IL0880__.439", "date": "1843-03-10", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 32, "al": "SWNE"}, {"sec": 32, "al": "SWSE"}]}, {"doc": "9082", "acc": "STA-IL0880__.440", "date": "1843-03-10", "names": ["MADEFON O CADWELL", "JOHN H FOSTER"], "parcels": [{"sec": 28, "al": "SWSE"}]}, {"doc": "9126", "acc": "STA-IL0880__.474", "date": "1843-03-10", "names": ["WILLIAM MCHUGH"], "parcels": [{"sec": 5, "al": "E½2NW"}]}, {"doc": "9149", "acc": "STA-IL0880__.491", "date": "1843-03-10", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 29, "al": "W½NW"}]}, {"doc": "9161", "acc": "STA-IL0890__.002", "date": "1843-03-10", "names": ["JACOB OTT"], "parcels": [{"sec": 31, "al": "SWNE"}]}, {"doc": "9188", "acc": "STA-IL0890__.033", "date": "1843-03-10", "names": ["BARNEY MOONEY"], "parcels": [{"sec": 3, "al": "NWSW"}]}, {"doc": "9212", "acc": "STA-IL0890__.056", "date": "1843-03-10", "names": ["JOHN GALLAGHER"], "parcels": [{"sec": 8, "al": "SWSE"}]}, {"doc": "9225", "acc": "STA-IL0890__.068", "date": "1843-03-10", "names": ["ALEXANDER BRAND", "MICHAEL DULANTY"], "parcels": [{"sec": 5, "al": "E½NE"}]}, {"doc": "9259", "acc": "STA-IL0890__.097", "date": "1843-03-10", "names": ["CALEB CADWELL"], "parcels": [{"sec": 28, "al": "W½NW"}]}, {"doc": "9280", "acc": "STA-IL0890__.110", "date": "1843-03-10", "names": ["CHARLES JINNINGS"], "parcels": [{"sec": 30, "al": "S½1SW"}]}, {"doc": "9285", "acc": "STA-IL0890__.115", "date": "1843-03-10", "names": ["PATRICK KENNEDY"], "parcels": [{"sec": 8, "al": "NWNW"}]}, {"doc": "9316", "acc": "STA-IL0890__.145", "date": "1843-03-10", "names": ["ARTHUR JOHNSON"], "parcels": [{"sec": 29, "al": "SWSW"}]}, {"doc": "9417", "acc": "STA-IL0890__.218", "date": "1843-03-10", "names": ["JAMES MELODY"], "parcels": [{"sec": 6, "al": "NWSE"}]}, {"doc": "9567", "acc": "STA-IL0890__.354", "date": "1843-03-10", "names": ["FRANCIS RUDD"], "parcels": [{"sec": 4, "al": "NWSW"}]}, {"doc": "9828", "acc": "STA-IL0890__.486", "date": "1843-03-10", "names": ["LLOYD STEARNS"], "parcels": [{"sec": 34, "al": "W½SW"}]}, {"doc": "10574", "acc": "STA-IL0910__.175", "date": "1844-07-10", "names": ["PATRICK MOONEY"], "parcels": [{"sec": 5, "al": "W½1NE"}, {"sec": 5, "al": "W½2NE"}]}, {"doc": "10609", "acc": "STA-IL0910__.209", "date": "1844-07-10", "names": ["FRANCIS GALLAUGHER"], "parcels": [{"sec": 26, "al": "SESW"}]}, {"doc": "10631", "acc": "STA-IL0910__.229", "date": "1844-07-10", "names": ["JOHN BYRNE"], "parcels": [{"sec": 9, "al": "W½SW"}]}, {"doc": "10640", "acc": "STA-IL0910__.238", "date": "1844-07-10", "names": ["WILLIAM GARY"], "parcels": [{"sec": 29, "al": "NWNE"}]}, {"doc": "10739", "acc": "STA-IL0910__.319", "date": "1844-07-10", "names": ["BENJAMIN MARKS"], "parcels": [{"sec": 4, "al": "SESE"}]}, {"doc": "10794", "acc": "STA-IL0910__.363", "date": "1844-07-10", "names": ["LAWRENCE MASTERSON"], "parcels": [{"sec": 8, "al": "S½NW"}]}, {"doc": "10899", "acc": "STA-IL0910__.438", "date": "1844-07-10", "names": ["PATRICK LUDLOW"], "parcels": [{"sec": 20, "al": "NWSE"}]}, {"doc": "10950", "acc": "STA-IL0910__.472", "date": "1844-07-10", "names": ["CHRISTIAN OTT"], "parcels": [{"sec": 29, "al": "NESW"}]}, {"doc": "11209", "acc": "STA-IL0920__.117", "date": "1844-07-10", "names": ["ANTHONY JOHNSTON"], "parcels": [{"sec": 29, "al": "NWSW"}]}, {"doc": "11210", "acc": "STA-IL0920__.118", "date": "1844-07-10", "names": ["ANTHONY JOHNSTON"], "parcels": [{"sec": 30, "al": "NWNE"}]}, {"doc": "11213", "acc": "STA-IL0920__.121", "date": "1844-07-10", "names": ["GEORGE LUTHER"], "parcels": [{"sec": 31, "al": "S½2SW"}]}, {"doc": "12185", "acc": "STA-IL0930__.397", "date": "1844-07-10", "names": ["THOMAS RUDD"], "parcels": [{"sec": 5, "al": "NESE"}]}, {"doc": "13781", "acc": "STA-IL0980__.092", "date": "1844-10-01", "names": ["FREDERICK MILKER"], "parcels": [{"sec": 28, "al": "SESE"}]}, {"doc": "14100", "acc": "STA-IL0980__.385", "date": "1844-10-01", "names": ["FRANCIS G BLANCHARD"], "parcels": [{"sec": 23, "al": "NE"}]}, {"doc": "14141", "acc": "STA-IL0980__.422", "date": "1844-10-01", "names": ["ALFRED PARSONS"], "parcels": [{"sec": 34, "al": "W½NW"}, {"sec": 34, "al": "S½NE"}]}, {"doc": "14207", "acc": "STA-IL0980__.486", "date": "1844-10-01", "names": ["JOHN HORNER"], "parcels": [{"sec": 29, "al": "SESW"}]}, {"doc": "14217", "acc": "STA-IL0980__.493", "date": "1844-10-01", "names": ["PATRICK KELLY"], "parcels": [{"sec": 6, "al": "E½2NW"}]}, {"doc": "12359", "acc": "STA-IL0950__.258", "date": "1845-05-01", "names": ["LAWRENCE DARSEY"], "parcels": [{"sec": 17, "al": "NWSW"}]}, {"doc": "12380", "acc": "STA-IL0950__.279", "date": "1845-05-01", "names": ["MARTIN LOUER"], "parcels": [{"sec": 31, "al": "SWSE"}]}, {"doc": "12683", "acc": "STA-IL0960__.068", "date": "1845-05-01", "names": ["FREDERICK BISCHOFF"], "parcels": [{"sec": 28, "al": "E½SW"}]}, {"doc": "12694", "acc": "STA-IL0960__.079", "date": "1845-05-01", "names": ["JOHN GALLAGHER"], "parcels": [{"sec": 8, "al": "NWSE"}]}, {"doc": "12827", "acc": "STA-IL0960__.203", "date": "1845-05-01", "names": ["FREDERICK BISCHOFF"], "parcels": [{"sec": 31, "al": "NWSE"}]}, {"doc": "12945", "acc": "STA-IL0960__.310", "date": "1845-05-01", "names": ["JOHN CASSEDY"], "parcels": [{"sec": 23, "al": "SWSW"}]}, {"doc": "12976", "acc": "STA-IL0960__.338", "date": "1845-05-01", "names": ["PATRICK CARLIN"], "parcels": [{"sec": 19, "al": "N½1SW"}]}, {"doc": "13037", "acc": "STA-IL0960__.392", "date": "1845-05-01", "names": ["ANN DUNAVAN"], "parcels": [{"sec": 19, "al": "N½2SW"}]}, {"doc": "13060", "acc": "STA-IL0960__.415", "date": "1845-05-01", "names": ["ABRAHAM FRANK"], "parcels": [{"sec": 22, "al": "NENW"}]}, {"doc": "13111", "acc": "STA-IL0960__.463", "date": "1845-05-01", "names": ["JOHN MCINTYRE"], "parcels": [{"sec": 17, "al": "S½SW"}]}, {"doc": "13123", "acc": "STA-IL0960__.474", "date": "1845-05-01", "names": ["PATRICK BOYLAN"], "parcels": [{"sec": 17, "al": "NENW"}]}, {"doc": "13217", "acc": "STA-IL0970__.066", "date": "1845-06-01", "names": ["MICHAEL MEEKEN"], "parcels": [{"sec": 19, "al": "N½2NW"}]}, {"doc": "13218", "acc": "STA-IL0970__.067", "date": "1845-06-01", "names": ["MICHAEL MEIGHAM"], "parcels": [{"sec": 18, "al": "S½1SW"}]}, {"doc": "13323", "acc": "STA-IL0970__.165", "date": "1845-06-01", "names": ["HIRAM CADWELL"], "parcels": [{"sec": 28, "al": "SENW"}]}, {"doc": "13335", "acc": "STA-IL0970__.176", "date": "1845-06-01", "names": ["JOHN BAKER"], "parcels": [{"sec": 29, "al": "NENW"}]}, {"doc": "13416", "acc": "STA-IL0970__.252", "date": "1845-06-01", "names": ["JOHN MALODY"], "parcels": [{"sec": 6, "al": "E½2NE"}]}, {"doc": "13644", "acc": "STA-IL0970__.466", "date": "1845-06-01", "names": ["MICHAEL MEIGHEN"], "parcels": [{"sec": 19, "al": "S½1SW"}]}, {"doc": "14260", "acc": "STA-IL0990__.037", "date": "1845-06-01", "names": ["FRANCIS GALLAGHER"], "parcels": [{"sec": 26, "al": "NESW"}]}, {"doc": "14261", "acc": "STA-IL0990__.038", "date": "1845-06-01", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 6, "al": "E½1NW"}]}, {"doc": "14265", "acc": "STA-IL0990__.041", "date": "1845-06-01", "names": ["DANIEL MCADAMS"], "parcels": [{"sec": 27, "al": "SENE"}]}, {"doc": "14345", "acc": "STA-IL0990__.117", "date": "1845-06-01", "names": ["JAMES DUFFEE"], "parcels": [{"sec": 26, "al": "E½NW"}]}, {"doc": "14363", "acc": "STA-IL0990__.135", "date": "1845-06-01", "names": ["CORNELIUS DWYER"], "parcels": [{"sec": 5, "al": "E½1NW"}]}, {"doc": "14364", "acc": "STA-IL0990__.136", "date": "1845-06-01", "names": ["JOHN CASSIDY"], "parcels": [{"sec": 22, "al": "W½SE"}]}, {"doc": "14366", "acc": "STA-IL0990__.138", "date": "1845-06-01", "names": ["HENRY WELSH"], "parcels": [{"sec": 23, "al": "NENW"}]}, {"doc": "14370", "acc": "STA-IL0990__.141", "date": "1845-06-01", "names": ["JOHN DURFEE"], "parcels": [{"sec": 35, "al": "NWNE"}]}, {"doc": "14371", "acc": "STA-IL0990__.142", "date": "1845-06-01", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 35, "al": "SWNE"}]}, {"doc": "14377", "acc": "STA-IL0990__.147", "date": "1845-06-01", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 5, "al": "W½1NW"}]}, {"doc": "14388", "acc": "STA-IL0990__.155", "date": "1845-06-01", "names": ["JAMES MELODY", "MICHAEL MCKEON"], "parcels": [{"sec": 6, "al": "NESE"}]}, {"doc": "14396", "acc": "STA-IL0990__.161", "date": "1845-06-01", "names": ["JOHN MELODY"], "parcels": [{"sec": 6, "al": "SESE"}]}, {"doc": "14397", "acc": "STA-IL0990__.162", "date": "1845-06-01", "names": ["FRANCIS GALLAGHER"], "parcels": [{"sec": 25, "al": "NE"}]}, {"doc": "14444", "acc": "STA-IL0990__.204", "date": "1845-06-01", "names": ["JOHN H FOSTER", "JOHN MALODY"], "parcels": [{"sec": 6, "al": "SWSE"}]}, {"doc": "14448", "acc": "STA-IL0990__.208", "date": "1845-06-01", "names": ["FRANCIS GALLAGHER"], "parcels": [{"sec": 22, "al": "NWSW"}]}, {"doc": "14514", "acc": "STA-IL0990__.265", "date": "1845-06-01", "names": ["JEREMIAH WILLIAMS"], "parcels": [{"sec": 28, "al": "E½NE"}]}, {"doc": "14556", "acc": "STA-IL0990__.303", "date": "1845-06-01", "names": ["DANIEL MCADAMS"], "parcels": [{"sec": 27, "al": "SWNE"}]}, {"doc": "14561", "acc": "STA-IL0990__.305", "date": "1845-06-01", "names": ["PATRICK MALODY"], "parcels": [{"sec": 6, "al": "E½1NE"}]}, {"doc": "14576", "acc": "STA-IL0990__.317", "date": "1845-06-01", "names": ["JEREMIAH WILLIAMS"], "parcels": [{"sec": 28, "al": "NWNE"}]}, {"doc": "14609", "acc": "STA-IL0990__.348", "date": "1845-06-01", "names": ["JAMES LANCASTER", "RICHARD K SWIFT"], "parcels": [{"sec": 8, "al": "NESW"}]}, {"doc": "14683", "acc": "STA-IL0990__.419", "date": "1845-06-01", "names": ["ALEXANDER BRAND", "JAMES FAGAN"], "parcels": [{"sec": 8, "al": "SESW"}]}, {"doc": "14758", "acc": "STA-IL0990__.490", "date": "1845-06-01", "names": ["LAURENCE DARSEY", "JOHN H FOSTER"], "parcels": [{"sec": 20, "al": "NWNE"}]}, {"doc": "14811", "acc": "STA-IL1000__.048", "date": "1845-06-01", "names": ["PHILIP COCHRANE", "JOHN KING"], "parcels": [{"sec": 15, "al": "SWSW"}]}, {"doc": "15009", "acc": "STA-IL1000__.221", "date": "1845-06-01", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 5, "al": "SESE"}]}, {"doc": "15128", "acc": "STA-IL1000__.337", "date": "1845-07-01", "names": ["JOHN FENNERTY"], "parcels": [{"sec": 22, "al": "W½NW"}, {"sec": 22, "al": "SENW"}]}, {"doc": "15136", "acc": "STA-IL1000__.345", "date": "1845-07-01", "names": ["JAMES BOLAND"], "parcels": [{"sec": 36, "al": "NWSW"}]}, {"doc": "15137", "acc": "STA-IL1000__.346", "date": "1845-07-01", "names": ["JOHN FITZPATRICK"], "parcels": [{"sec": 36, "al": "SWSW"}]}, {"doc": "15279", "acc": "STA-IL1000__.483", "date": "1845-07-01", "names": ["TIMOTHY KENNEDY"], "parcels": [{"sec": 8, "al": "NENW"}, {"sec": 8, "al": "NE"}]}, {"doc": "15983", "acc": "STA-IL1020__.218", "date": "1845-09-01", "names": ["BENJAMIN MARKS"], "parcels": [{"sec": 15, "al": "NWSW"}]}, {"doc": "15994", "acc": "STA-IL1020__.229", "date": "1845-09-01", "names": ["FRANCIS GALLAGHER"], "parcels": [{"sec": 26, "al": "W½NW"}]}, {"doc": "16146", "acc": "STA-IL1020__.377", "date": "1845-09-01", "names": ["JOHN SWEENY"], "parcels": [{"sec": 10, "al": "SW"}, {"sec": 10, "al": "SWNW"}]}, {"doc": "16205", "acc": "STA-IL1020__.432", "date": "1845-09-01", "names": ["ABRAHAM FRANK", "ARTHUR W MAGILL"], "parcels": [{"sec": 15, "al": "W½SE"}]}, {"doc": "16230", "acc": "STA-IL1020__.456", "date": "1845-09-01", "names": ["RICHARD TWOMAY"], "parcels": [{"sec": 9, "al": "W½NE"}]}, {"doc": "16356", "acc": "STA-IL1030__.075", "date": "1845-09-01", "names": ["JOHN O CONNELL"], "parcels": [{"sec": 10, "al": "E½SE"}, {"sec": 10, "al": "NWNW"}]}, {"doc": "16357", "acc": "STA-IL1030__.076", "date": "1845-09-01", "names": ["JOHN OCONNELL"], "parcels": [{"sec": 3, "al": "SWSW"}]}, {"doc": "16475", "acc": "STA-IL1030__.189", "date": "1845-09-01", "names": ["DANIEL BERGEN", "ANTHONY SULLIVAN"], "parcels": [{"sec": 17, "al": "W½NE"}]}, {"doc": "16549", "acc": "STA-IL1030__.253", "date": "1845-09-01", "names": ["WILLIAM DARCY"], "parcels": [{"sec": 17, "al": "SWSE"}]}, {"doc": "16559", "acc": "STA-IL1030__.263", "date": "1845-09-01", "names": ["JOHN GALLAGHER"], "parcels": [{"sec": 17, "al": "NWSE"}]}, {"doc": "16562", "acc": "STA-IL1030__.266", "date": "1845-09-01", "names": ["JOHN SULLIVAN"], "parcels": [{"sec": 21, "al": "W½NE"}]}, {"doc": "16609", "acc": "STA-IL1030__.312", "date": "1845-09-01", "names": ["JOHN DOYLE"], "parcels": [{"sec": 5, "al": "W½SE"}]}, {"doc": "16626", "acc": "STA-IL1030__.330", "date": "1845-09-01", "names": ["GEORGE ASHER"], "parcels": [{"sec": 34, "al": "SESE"}]}, {"doc": "16766", "acc": "STA-IL1030__.461", "date": "1845-09-01", "names": ["JOHN HETTINGER"], "parcels": [{"sec": 14, "al": "NWNW"}]}, {"doc": "16832", "acc": "STA-IL1040__.010", "date": "1845-09-01", "names": ["JOHN CORKERAN"], "parcels": [{"sec": 22, "al": "NESW"}]}, {"doc": "17048", "acc": "STA-IL1040__.205", "date": "1845-09-01", "names": ["JOHN MATTHEWS"], "parcels": [{"sec": 34, "al": "NENW"}]}, {"doc": "17166", "acc": "STA-IL1040__.313", "date": "1845-09-01", "names": ["JOHN CORKERAN", "RICHARD K SWIFT"], "parcels": [{"sec": 21, "al": "NENE"}]}, {"doc": "17179", "acc": "STA-IL1040__.324", "date": "1845-09-01", "names": ["DANIEL BERGEN"], "parcels": [{"sec": 17, "al": "NENE"}]}, {"doc": "17205", "acc": "STA-IL1040__.343", "date": "1845-09-01", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 34, "al": "E½SW"}]}, {"doc": "17334", "acc": "STA-IL1040__.456", "date": "1845-09-01", "names": ["FRANCIS MCGOVERN"], "parcels": [{"sec": 22, "al": "NESE"}]}, {"doc": "15299", "acc": "STA-IL1010__.004", "date": "1845-10-03", "names": ["WILLIAM B EGAN", "EPHRAIM C STOWELL"], "parcels": [{"sec": 14, "al": "E½SW"}, {"sec": 14, "al": "SE"}]}, {"doc": "15345", "acc": "STA-IL1010__.049", "date": "1845-10-03", "names": ["HUGH YOUNG"], "parcels": [{"sec": 25, "al": "S½SE"}]}, {"doc": "15348", "acc": "STA-IL1010__.052", "date": "1845-10-03", "names": ["JOHN MCGOVERN"], "parcels": [{"sec": 25, "al": "N½SE"}]}, {"doc": "15567", "acc": "STA-IL1010__.260", "date": "1845-10-03", "names": ["BENJAMIN MARKS"], "parcels": [{"sec": 15, "al": "SWNW"}]}, {"doc": "15714", "acc": "STA-IL1010__.405", "date": "1845-10-03", "names": ["BENJAMIN MARKS"], "parcels": [{"sec": 3, "al": "E½SW"}]}, {"doc": "15718", "acc": "STA-IL1010__.409", "date": "1845-10-03", "names": ["OWEN MONEGHEN"], "parcels": [{"sec": 18, "al": "N½2NW"}]}, {"doc": "17657", "acc": "STA-IL1060__.049", "date": "1846-02-01", "names": ["CASPAR WALTER"], "parcels": [{"sec": 27, "al": "NWSW"}]}, {"doc": "17724", "acc": "STA-IL1060__.115", "date": "1846-02-01", "names": ["RICHARD GOODBODY"], "parcels": [{"sec": 4, "al": "1NW"}]}, {"doc": "17865", "acc": "STA-IL1060__.253", "date": "1846-02-01", "names": ["ROBERT DAGGITT"], "parcels": [{"sec": 35, "al": "SWNW"}]}, {"doc": "17940", "acc": "STA-IL1060__.326", "date": "1846-02-01", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 20, "al": "E½NE"}]}, {"doc": "17945", "acc": "STA-IL1060__.331", "date": "1846-02-01", "names": ["JOHN CLAUS"], "parcels": [{"sec": 15, "al": "E½NW"}]}, {"doc": "17950", "acc": "STA-IL1060__.336", "date": "1846-02-01", "names": ["SCOTT LAURENSON"], "parcels": [{"sec": 17, "al": "SENE"}]}, {"doc": "17976", "acc": "STA-IL1060__.362", "date": "1846-02-01", "names": ["THOMAS ADDISON"], "parcels": [{"sec": 15, "al": "N½NE"}]}, {"doc": "18053", "acc": "STA-IL1060__.438", "date": "1846-02-01", "names": ["KONRAD STINE"], "parcels": [{"sec": 29, "al": "SWNE"}]}, {"doc": "18057", "acc": "STA-IL1060__.442", "date": "1846-02-01", "names": ["LAURIN P HILLIARD"], "parcels": [{"sec": 34, "al": "NESE"}]}, {"doc": "18075", "acc": "STA-IL1060__.459", "date": "1846-02-01", "names": ["DANIEL MCADAMS"], "parcels": [{"sec": 23, "al": "NWSW"}]}, {"doc": "18098", "acc": "STA-IL1060__.479", "date": "1846-02-01", "names": ["MICHAEL KITTAL"], "parcels": [{"sec": 20, "al": "SWSE"}]}, {"doc": "18115", "acc": "STA-IL1060__.496", "date": "1846-02-01", "names": ["WILLIAM BRIGGS", "THOMAS R GREEN"], "parcels": [{"sec": 34, "al": "W½SE"}]}, {"doc": "18938", "acc": "STA-IL1080__.279", "date": "1846-02-01", "names": ["JOHN MCINTYRE"], "parcels": [{"sec": 7, "al": "S½2SW"}]}, {"doc": "13091", "acc": "STA-IL1050__.051", "date": "1846-02-10", "names": ["JOHN BAKER"], "parcels": [{"sec": 29, "al": "SENW"}]}, {"doc": "13640", "acc": "STA-IL1050__.071", "date": "1846-02-10", "names": ["PHILEMAN CADWELL"], "parcels": [{"sec": 34, "al": "SENW"}]}, {"doc": "14513", "acc": "STA-IL1050__.130", "date": "1846-02-10", "names": ["JOHN MILLEN", "RICHARD K SWIFT"], "parcels": [{"sec": 27, "al": "SWSW"}]}, {"doc": "14885", "acc": "STA-IL1050__.154", "date": "1846-02-10", "names": ["JOHN H FOSTER", "MARTIN SULLIVAN"], "parcels": [{"sec": 21, "al": "E½NW"}]}, {"doc": "14906", "acc": "STA-IL1050__.156", "date": "1846-02-10", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 5, "al": "NWSW"}]}, {"doc": "17290", "acc": "STA-IL1050__.284", "date": "1846-02-10", "names": ["PETER YORE"], "parcels": [{"sec": 6, "al": "NESW"}]}, {"doc": "17297", "acc": "STA-IL1050__.288", "date": "1846-02-10", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 6, "al": "W½1NE"}, {"sec": 6, "al": "W½2NE"}], "note": "one further parcel not captured"}, {"doc": "17477", "acc": "STA-IL1050__.377", "date": "1846-02-10", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 19, "al": "W½SE"}]}, {"doc": "17484", "acc": "STA-IL1050__.384", "date": "1846-02-10", "names": ["JOHN COCHRAN"], "parcels": [{"sec": 21, "al": "SENE"}]}, {"doc": "17485", "acc": "STA-IL1050__.385", "date": "1846-02-10", "names": ["JOHN COCHRAN"], "parcels": [{"sec": 22, "al": "SWSW"}]}, {"doc": "17561", "acc": "STA-IL1050__.456", "date": "1846-02-10", "names": ["HENRY KIEST"], "parcels": [{"sec": 35, "al": "W½SW"}, {"sec": 35, "al": "SESW"}]}, {"doc": "17594", "acc": "STA-IL1050__.489", "date": "1846-02-10", "names": ["PETER GALLAGHER", "PATRICK JOYCE"], "parcels": [{"sec": 21, "al": "W½NW"}]}, {"doc": "19274", "acc": "STA-IL1090__.093", "date": "1846-02-18", "names": ["KANE HIGGINS"], "parcels": [{"sec": 27, "al": "E½SW"}]}, {"doc": "19393", "acc": "STA-IL1090__.203", "date": "1846-02-18", "names": ["KANE HIGGINS"], "parcels": [{"sec": 27, "al": "SENW"}]}, {"doc": "19444", "acc": "STA-IL1090__.253", "date": "1846-02-18", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 4, "al": "NESE"}]}, {"doc": "19467", "acc": "STA-IL1090__.275", "date": "1846-02-18", "names": ["MICHAEL RIDER"], "parcels": [{"sec": 21, "al": "W½SW"}]}, {"doc": "19471", "acc": "STA-IL1090__.279", "date": "1846-02-18", "names": ["FREDERICK BISCHOFF"], "parcels": [{"sec": 28, "al": "NWSE"}]}, {"doc": "18146", "acc": "STA-IL1070__.028", "date": "1846-03-01", "names": ["ANTHONY JOHNSTON"], "parcels": [{"sec": 20, "al": "SWNE"}]}, {"doc": "18298", "acc": "STA-IL1070__.172", "date": "1846-03-01", "names": ["RICHARD K SWIFT"], "parcels": [{"sec": 5, "al": "W½2NW"}]}, {"doc": "18303", "acc": "STA-IL1070__.176", "date": "1846-03-01", "names": ["JOHN CORKERIN"], "parcels": [{"sec": 21, "al": "E½SE"}]}, {"doc": "18392", "acc": "STA-IL1070__.264", "date": "1846-03-01", "names": ["JOHN MCINTYRE"], "parcels": [{"sec": 7, "al": "N½2SW"}]}, {"doc": "18450", "acc": "STA-IL1070__.316", "date": "1846-03-01", "names": ["JOHN SCHENTZEL"], "parcels": [{"sec": 20, "al": "E½SE"}]}, {"doc": "18635", "acc": "STA-IL1070__.490", "date": "1846-03-01", "names": ["JOHN MACREADY"], "parcels": [{"sec": 26, "al": "W½NE"}, {"sec": 26, "al": "SENE"}]}, {"doc": "19747", "acc": "STA-IL1100__.047", "date": "1846-06-01", "names": ["JOHN GALLIGER"], "parcels": [{"sec": 8, "al": "E½SE"}]}, {"doc": "19754", "acc": "STA-IL1100__.054", "date": "1846-06-01", "names": ["HERMAN J KOLLER"], "parcels": [{"sec": 35, "al": "E½SE"}]}, {"doc": "19914", "acc": "STA-IL1100__.209", "date": "1846-06-01", "names": ["JAMES MCCREADY"], "parcels": [{"sec": 27, "al": "NWSE"}]}, {"doc": "18224", "acc": "STA-IL1100__.299", "date": "1846-12-01", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 36, "al": "W½NE"}]}, {"doc": "21202", "acc": "STA-IL1130__.039", "date": "1847-04-10", "names": ["DENNIS CONROY"], "parcels": [{"sec": 34, "al": "N½NE"}]}, {"doc": "23889", "acc": "STA-IL1180__.057", "date": "1848-02-01", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 19, "al": "S½2SW"}]}, {"doc": "24002", "acc": "STA-IL1180__.158", "date": "1848-02-01", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 21, "al": "W½SE"}]}, {"doc": "24289", "acc": "STA-IL1180__.396", "date": "1848-02-01", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 4, "al": "NWSE"}]}, {"doc": "24641", "acc": "STA-IL1190__.210", "date": "1848-02-01", "names": ["HENRY KIEST"], "parcels": [{"sec": 28, "al": "SWNE"}]}, {"doc": "24691", "acc": "STA-IL1190__.257", "date": "1848-02-01", "names": ["PETER L YOE"], "parcels": [{"sec": 22, "al": "SESW"}]}, {"doc": "24697", "acc": "STA-IL1190__.261", "date": "1848-02-01", "names": ["PETER L YOE"], "parcels": [{"sec": 22, "al": "SESW"}]}, {"doc": "24732", "acc": "STA-IL1190__.291", "date": "1848-02-01", "names": ["PATRICK MALEY"], "parcels": [{"sec": 21, "al": "E½SW"}]}, {"doc": "21850", "acc": "STA-IL1140__.162", "date": "1848-03-01", "names": ["JOB GALLOWAY"], "parcels": [{"sec": 35, "al": "NESW"}]}, {"doc": "21860", "acc": "STA-IL1140__.171", "date": "1848-03-01", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 18, "al": "S½2NW"}]}, {"doc": "21974", "acc": "STA-IL1140__.278", "date": "1848-03-01", "names": ["JOHN H FOSTER"], "parcels": [{"sec": 36, "al": "NENE"}]}, {"doc": "22159", "acc": "STA-IL1140__.456", "date": "1848-03-01", "names": ["JAMES WHALIN"], "parcels": [{"sec": 9, "al": "E½NE"}]}, {"doc": "23720", "acc": "STA-IL1170__.411", "date": "1848-03-01", "names": ["JOHN MCINTYRE"], "parcels": [{"sec": 19, "al": "S½2NW"}]}, {"doc": "23736", "acc": "STA-IL1170__.425", "date": "1848-03-01", "names": ["CASPAR CAULE"], "parcels": [{"sec": 28, "al": "NENW"}]}, {"doc": "24970", "acc": "STA-IL1200__.012", "date": "1848-03-01", "names": ["RICHARD K SWIFT"], "parcels": [{"sec": 27, "al": "NWNE"}]}, {"doc": "24994", "acc": "STA-IL1200__.034", "date": "1848-03-01", "names": ["JOHN O CONNELL"], "parcels": [{"sec": 35, "al": "E½NW"}, {"sec": 35, "al": "W½SE"}]}, {"doc": "20007", "acc": "STA-IL1100__.368", "date": "1848-03-10", "names": ["JAMES MOONEY"], "parcels": [{"sec": 27, "al": "NENW"}]}, {"doc": "20029", "acc": "STA-IL1100__.389", "date": "1848-03-10", "names": ["JOSEPH SIMONS"], "parcels": [{"sec": 4, "al": "NESW"}]}, {"doc": "22342", "acc": "STA-IL1150__.141", "date": "1848-03-10", "names": ["JOHN BOYLAN", "ALEXANDER BRAND"], "parcels": [{"sec": 28, "al": "NESE"}]}, {"doc": "22649", "acc": "STA-IL1150__.432", "date": "1848-03-10", "names": ["JOHN BIGGS"], "parcels": [{"sec": 15, "al": "E½SE"}, {"sec": 15, "al": "SENE"}]}, {"doc": "22930", "acc": "STA-IL1160__.191", "date": "1848-03-10", "names": ["GODFREY LUDWICK"], "parcels": [{"sec": 15, "al": "SWNE"}]}, {"doc": "20231", "acc": "STA-IL1110__.088", "date": "1848-04-10", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 27, "al": "E½SE"}]}, {"doc": "20232", "acc": "STA-IL1110__.089", "date": "1848-04-10", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 35, "al": "NWNW"}]}, {"doc": "20257", "acc": "STA-IL1110__.114", "date": "1848-04-10", "names": ["JOSEPH SIMONS"], "parcels": [{"sec": 4, "al": "SESW"}]}, {"doc": "20326", "acc": "STA-IL1110__.181", "date": "1848-04-10", "names": ["JOHN RUDD"], "parcels": [{"sec": 9, "al": "NENW"}]}, {"doc": "20370", "acc": "STA-IL1110__.225", "date": "1848-04-10", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 27, "al": "SWSE"}]}, {"doc": "20473", "acc": "STA-IL1110__.328", "date": "1848-04-10", "names": ["PATRICK BUTLER"], "parcels": [{"sec": 14, "al": "SWNW"}]}, {"doc": "20593", "acc": "STA-IL1110__.446", "date": "1848-04-10", "names": ["ALEXANDER BRAND"], "parcels": [{"sec": 9, "al": "SENW"}]}, {"doc": "23818", "acc": "STA-IL1200__.188", "date": "1848-06-01", "names": ["THOMAS M MCCRAREN"], "parcels": [{"sec": 27, "al": "W½NW"}]}, {"doc": "25036", "acc": "STA-IL1200__.354", "date": "1848-06-01", "names": ["THOMAS GOODBODY"], "parcels": [{"sec": 4, "al": "W½2NE"}]}, {"doc": "25783", "acc": "STA-IL1220__.066", "date": "1848-06-01", "names": ["JOHN EASTON", "ROBERT EASTON"], "parcels": [{"sec": 12, "al": "NWNW"}]}, {"doc": "26575", "acc": "STA-IL1230__.400", "date": "1849-05-01", "names": ["SAMUEL HOARD"], "parcels": [{"sec": 30, "al": "S½2SW"}]}, {"doc": "26845", "acc": "STA-IL1240__.164", "date": "1849-05-01", "names": ["CHRISTOPHER DUFF"], "parcels": [{"sec": 4, "al": "E½2NE"}]}, {"doc": "29224", "acc": "STA-IL1280__.102", "date": "1854-01-03", "names": ["JOHN LEWIS"], "parcels": [{"sec": 4, "al": "SWSE"}]}];
+const GLO_TRS = {town:43, range:12};
+function gloLink(p, sec){ return `https://glorecords.blm.gov/s/advanced-search#/search?q=${encodeURIComponent(p.names[0])}&meridians=03&townships=0430N&ranges=0120E&sections=${String(sec).padStart(2,'0')}&documenttype=Patent&geostatecodes=IL&page=1&pageSize=25`; }
+function parseAliquot(al){
+  const m = al.match(/^(?:([NSEW])½)?(\d)?(NE|NW|SE|SW)?(NE|NW|SE|SW)?$/); if(!m) return null;
+  const [,half,lot,a,b] = m;
+  if(b) return {half:null, lot:null, qq:a, q:b};
+  return {half:half||null, lot:lot||null, qq:null, q:a||null};
+}
+function aliquotLabel(al){
+  const p = parseAliquot(al); if(!p||!p.q) return al;
+  const Q = {NE:'northeast',NW:'northwest',SE:'southeast',SW:'southwest'}, H={N:'north',S:'south',E:'east',W:'west'};
+  if(p.qq) return `${Q[p.qq]} ¼ of the ${Q[p.q]} ¼ (40 acres)`;
+  if(p.lot) return `${p.half?H[p.half]+' half of ':''}lot ${p.lot} of the ${Q[p.q]} ¼`;
+  if(p.half) return `${H[p.half]} half of the ${Q[p.q]} ¼ (80 acres)`;
+  return `the ${Q[p.q]} ¼ (160 acres)`;
+}
+function locateInSection(ctr, bbox){
+  const [minx,miny,maxx,maxy] = bbox; const fx=(ctr.lng-minx)/(maxx-minx), fy=(ctr.lat-miny)/(maxy-miny);
+  const q = (fy>=.5?'N':'S')+(fx>=.5?'E':'W'); const lx=(fx*2)%1, ly=(fy*2)%1; const qq=(ly>=.5?'N':'S')+(lx>=.5?'E':'W');
+  return {q, qq, lx, ly, fx, fy};
+}
+function aliquotMatch(al, loc){
+  const p = parseAliquot(al); if(!p||!p.q||p.q!==loc.q) return null;
+  if(p.qq) return p.qq===loc.qq ? 'exact' : null;
+  if(p.half){ const ok = p.half==='N'?loc.ly>=.5 : p.half==='S'?loc.ly<.5 : p.half==='E'?loc.lx>=.5 : loc.lx<.5; if(!ok) return null; return p.lot?'lot':'half'; }
+  return p.lot ? 'lot' : 'quarter';
+}
+function aliquotBounds(al, bbox){
+  const p = parseAliquot(al); if(!p||!p.q) return null; const [minx,miny,maxx,maxy]=bbox; const w=(maxx-minx)/2, hgt=(maxy-miny)/2;
+  let x0 = p.q[1]==='E'?minx+w:minx, y0 = p.q[0]==='N'?miny+hgt:miny, x1=x0+w, y1=y0+hgt;
+  if(p.qq){ const w2=w/2,h2=hgt/2; x0 = p.qq[1]==='E'?x0+w2:x0; y0 = p.qq[0]==='N'?y0+h2:y0; x1=x0+w2; y1=y0+h2; }
+  else if(p.half){ if(p.half==='N') y0+=hgt/2; else if(p.half==='S') y1-=hgt/2; else if(p.half==='E') x0+=w/2; else x1-=w/2; }
+  return [[y0,x0],[y1,x1]];
+}
+const patentLayer = L.layerGroup().addTo(map);
+
+if(location.protocol==='file:'){ setTimeout(()=>setStatus('Historical map images load from the maps/ folder; open the hosted site for them to appear.'),1500); }
+/* ---------- Lookup ---------- */
+const $ = s=>document.querySelector(s);
+function setStatus(t, err){ const el = $('#status'); el.textContent = t; el.classList.toggle('err', !!err); }
+async function getJSON(url){ const r = await fetch(url); if(!r.ok) throw new Error(r.status); const j = await r.json(); if(j.error) throw new Error(j.error.message||'service error'); return j; }
+const fmtPIN = p => p && p.length===10 ? `${p.slice(0,2)}-${p.slice(2,4)}-${p.slice(4,7)}-${p.slice(7)}` : p;
+const fmtDate = ms => ms ? new Date(ms).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric',timeZone:'UTC'}) : '';
+const fmtMoney = n => n ? '$'+Math.round(n).toLocaleString('en-US') : '';
+const esc = s => String(s??'').replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function lookup(q){
+  q = q.trim(); if(!q) return;
+  setStatus('Looking up at Lake County…');
+  try{
+    let feat;
+    const pinDigits = q.replace(/\D/g,'');
+    if(/^[\d\s-]+$/.test(q) && pinDigits.length===10){
+      const j = await getJSON(`${SVC.parcelInfo}?where=PIN%3D'${pinDigits}'&outFields=${FIELDS}&returnGeometry=true&outSR=4326&f=geojson`);
+      feat = j.features[0];
+    } else {
+      const g = await getJSON(`${SVC.geocode}?SingleLine=${encodeURIComponent(q.match(/highland park|highwood|deerfield|lake forest/i)?q:q+' Highland Park')}&outSR=4326&maxLocations=1&f=json`);
+      const c = g.candidates && g.candidates[0]; if(!c) throw new Error('No address match in Lake County.');
+      const j = await getJSON(`${SVC.parcelInfo}?geometry=${c.location.x},${c.location.y}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=${FIELDS}&returnGeometry=true&outSR=4326&f=geojson`);
+      feat = j.features[0];
+      if(!feat){ // address point may fall in the right of way: try the street-number match
+        const num = q.match(/^\d+/); const st = q.replace(/^\d+\s*/,'').replace(/,.*$/,'').replace(/\b(highland park|highwood)\b/ig,'').trim();
+        const j2 = await getJSON(`${SVC.parcelInfo}?where=UPPER(situs_addr_line_1)%20LIKE%20'${num?num[0]:''}%25${encodeURIComponent(st.toUpperCase().split(' ')[0])}%25'&outFields=${FIELDS}&returnGeometry=true&outSR=4326&f=geojson`);
+        feat = j2.features[0];
+      }
+    }
+    if(!feat) throw new Error('No parcel found for that entry.');
+    await render(feat);
+    try{ history.replaceState(null,'','#'+encodeURIComponent(fmtPIN(feat.properties.PIN))); }catch(e){}
+    setStatus('');
+  }catch(err){ setStatus(err.message==='Failed to fetch' ? 'Could not reach Lake County GIS. Open this file in a browser with internet access.' : err.message, true); }
+}
+
+async function render(feat){
+  const a = feat.properties;
+  parcelLayer.clearLayers(); parcelLayer.addData(feat);
+  const b = parcelLayer.getBounds(); map.fitBounds(b.pad(2));
+  const ctr = b.getCenter();
+  const trs = `${a.TOWN}-${a.RANGE}-${a.SECT}`;
+  const pin = a.PIN; const twpCode = pin.slice(0,2), block = pin.slice(4,7), quarter = ['','NE','NW','SW','SE'][+block[0]] || `quarter ${block[0]}`;
+
+  // Parallel: subdivision and historic parcels at the centroid
+  const [sub, hist] = await Promise.all([
+    getJSON(`${SVC.subdivisions}?geometry=${ctr.lng},${ctr.lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=Name,ConveyanceType&returnGeometry=false&f=json`).catch(()=>({features:[]})),
+    getJSON(`${SVC.historicQ}?geometry=${ctr.lng},${ctr.lat}&geometryType=esriGeometryPoint&inSR=4326&spatialRel=esriSpatialRelIntersects&outFields=PIN,DisplayStartDate,DisplayEndDate&returnGeometry=false&orderByFields=DisplayStartDate&f=json`).catch(()=>({features:[]}))
+  ]);
+  const subs = (sub.features||[]).map(f=>f.attributes);
+  const hists = (hist.features||[]).map(f=>f.attributes);
+
+  // Federal land patents for this section, and which one covered this lot
+  let patents = [], secBox = null, loc = null;
+  if(+a.TOWN===GLO_TRS.town && +a.RANGE===GLO_TRS.range){
+    const sec = +a.SECT;
+    try{ const sg = await getJSON(`${SVC.sections}?where=TWP%3D${a.TOWN}%20AND%20RNG%3D${a.RANGE}%20AND%20SEC%3D${sec}&outFields=TWP,RNG,SEC&returnGeometry=true&outSR=4326&f=geojson`);
+      const g = sg.features && sg.features[0]; if(g){ const bb = L.geoJSON(g).getBounds(); secBox=[bb.getWest(),bb.getSouth(),bb.getEast(),bb.getNorth()]; loc = locateInSection(ctr, secBox); } }catch(e){}
+    patents = PATENTS.filter(p=>p.parcels.some(q=>q.sec===sec)).map(p=>{ const parts = p.parcels.filter(q=>q.sec===sec); const hit = loc ? parts.map(q=>aliquotMatch(q.al, loc)).find(Boolean) : null; return {...p, parts, hit:hit||null}; });
+    patents.sort((x,y)=> (y.hit?1:0)-(x.hit?1:0) || x.date.localeCompare(y.date));
+    patentLayer.clearLayers();
+    if(secBox) patents.filter(p=>p.hit).forEach(p=>p.parts.forEach(q=>{ const bnd=aliquotBounds(q.al, secBox); if(bnd) L.rectangle(bnd,{color:'#8a6d1f',weight:1.5,dashArray:'6 4',fill:true,fillOpacity:.06}).bindTooltip(`${p.names.join(' & ')} · ${q.al} · ${p.date.slice(0,4)}`,{sticky:true}).addTo(patentLayer); }));
+  }
+
+  const names = [...SEED_NAMES, ...userNames].filter(n=>n.trs===trs).sort((x,y)=> (parseInt(x.year.replace(/\D/g,''))||0)-(parseInt(y.year.replace(/\D/g,''))||0));
+  const legal = [a.legdesc1,a.legdesc2,a.legdesc3].filter(Boolean).join(' ');
+  const subName = subs[0]?.Name || (legal.split(';')[0]||'').trim();
+  const sales = [[a.sale_date1,a.sale_amt1,a.doc_num1],[a.sale_date2,a.sale_amt2,a.doc_num2]].filter(s=>s[0]).sort((x,y)=>y[0]-x[0]);
+  const prev = current && current.pin===pin ? current : null;
+  const savedStory = (store.get('stories',{})||{})[pin];
+  current = { a, feat, trs, pin, quarter, subs, hists, names, legal, subName, sales, ctr, patents, loc, when:new Date(), story: prev?.story||savedStory?.text||null, storyModel: prev?.storyModel||savedStory?.model||null };
+
+  $('#result').innerHTML = `
+  <section class="card">
+    <div class="eyebrow">${esc(a.MUNI_NAME||'')} · ${esc(a.TOWNSHIPNAME||'')} Township</div>
+    <div class="addr">${esc(a.situs_addr_line_1||'(no situs address)')}</div>
+    <div class="pin">PIN ${fmtPIN(pin)}</div>
+    <div class="exportbar" aria-label="Export"><button type="button" class="primary" data-x="print">Print / save PDF</button><button type="button" data-x="md">Download Markdown</button><button type="button" data-x="json">Download JSON</button><button type="button" data-x="link">Copy link</button></div>
+    <dl>
+      <dt>Survey grid</dt><dd>Section ${a.SECT}, Township ${a.TOWN} North, Range ${a.RANGE} East, 3rd P.M. <span class="chip confirmed">county</span></dd>
+      <dt>PIN decoded</dt><dd class="mono">${twpCode} = ${esc(a.TOWNSHIPNAME)} twp · ${pin.slice(2,4)} = section · ${block} = block in ${quarter} ¼ · ${pin.slice(7)} = parcel</dd>
+      <dt>Lot size</dt><dd>${a.lot_area_acres?a.lot_area_acres.toFixed(3)+' acres':'—'}${a.ZONING?` · zoned ${esc(a.ZONING)}`:''}</dd>
+      <dt>USGS quad</dt><dd>${esc(a.USGS_QUAD||'—')}</dd>
+    </dl>
+  </section>
+  <section class="card">
+    <h2>The lot</h2>
+    <dl>
+      <dt>Legal description</dt><dd>${esc(legal||'—')}</dd>
+      <dt>Recorded subdivision</dt><dd>${subs.length?subs.map(s=>`${esc(s.Name)} <span class="chip">${esc(s.ConveyanceType)}</span>`).join('<br>'):'None mapped at this point (metes-and-bounds or older plat)'}</dd>
+      <dt>Year built</dt><dd>${a.improve_year_built||'—'}${a.stories?` · ${esc(a.stories).toLowerCase()}`:''}${a.const_type?` · ${esc(a.const_type)}`:''}</dd>
+      <dt>Class</dt><dd>${esc(a.class_desc_pardat||'—')}</dd>
+    </dl>
+    ${sales.length?`<div class="eyebrow">Recent transfers (assessor)</div><ul class="timeline">${sales.map(s=>`<li><span class="yr">${fmtDate(s[0])}</span> · ${fmtMoney(s[1])||'no price'} ${s[2]?`<span class="nt">doc ${esc(s[2])}</span>`:''}</li>`).join('')}</ul>`:''}
+  </section>
+  <section class="card" id="storyCard">
+    <h2>The story so far</h2>
+    <div id="storyBody">${current.story?`<div class="story"><div class="meta">Written by Claude from the findings below · ${esc(current.storyModel||'')}</div>${current.story.split(/\n\s*\n/).map(p=>`<p>${esc(p)}</p>`).join('')}</div>`:`<p class="hint" style="margin:0 0 6px">Claude can turn the facts on this page into a short narrative for the owner. It uses only what is shown here plus general Highland Park history, and flags what is unverified.</p>`}
+    <div class="exportbar"><button type="button" class="primary" data-s="tell">${current.story?'Rewrite the story':'Tell the story'}</button><button type="button" data-s="key">${store.get('apikey','')?'Change API key':'Set API key'}</button></div>
+    <div id="keyRow" hidden><div class="keyrow"><input id="apikey" type="password" placeholder="Anthropic API key (sk-ant-…)" autocomplete="off"><button class="btn" type="button" data-s="savekey">Save</button></div><p class="hint">Stored only in this browser. Get one at console.anthropic.com. Each story costs about a cent.</p></div>
+  </section>
+  <section class="card">
+    <h2>Parcel lineage, 1996 to today</h2>
+    <p class="hint" style="margin:0 0 6px">Parcels the county has mapped at this spot. A PIN that ends means the lot was split, merged or renumbered. Slide the year in the layer panel to see the outlines.</p>
+    ${hists.length?`<ul class="timeline">${hists.map(h=>`<li><span class="yr">${fmtDate(h.DisplayStartDate)} → ${h.DisplayEndDate?fmtDate(h.DisplayEndDate):'present'}</span><br><span class="mono">PIN ${fmtPIN(h.PIN)}</span>${h.PIN===pin?' <span class="chip confirmed">current</span>':''}</li>`).join('')}${hists.every(h=>h.PIN!==pin)?`<li><span class="yr">current</span><br><span class="mono">PIN ${fmtPIN(pin)}</span> <span class="chip">created by consolidation or split</span></li>`:''}</ul>`:'<p>No historic parcel records returned.</p>'}
+  </section>
+  <section class="card">
+    <h2>Names on the old maps · Section ${a.SECT}</h2>
+    <p class="hint" style="margin:0 0 4px">Owners written on historical maps of this section. <span class="chip read">read</span> = read off a scan, unverified · <span class="chip confirmed">confirmed</span> = backed by a record · <span class="chip inferred">inferred</span>. A deed or abstract of title is what proves ownership of this exact lot.</p>
+    ${names.length?`<ul class="timeline">${names.map(n=>`<li><span class="yr">${esc(n.year)}</span> <span class="chip ${esc(n.conf)}">${esc(n.conf)}</span><br><span class="nm">${esc(n.name)}</span>${n.note?`<br><span class="nt">${esc(n.note)}</span>`:''}<br><span class="nt">Source: ${esc(n.src)}</span></li>`).join('')}</ul>`:`<p>No transcriptions yet for Section ${a.SECT}. Turn on a historical map, read the names over this lot, and add them below.</p>`}
+    <details><summary>Add a name you read on a map</summary>
+      <form class="addrow" id="addName">
+        <input name="year" placeholder="Year" required><input name="name" placeholder="Name as written" required>
+        <select name="conf"><option value="read">read</option><option value="confirmed">confirmed</option><option value="inferred">inferred</option></select>
+        <div class="full"><input name="note" placeholder="Note (location, acreage)"><input name="src" placeholder="Which map" required><button class="btn" type="submit">Add</button></div>
+      </form>
+    </details>
+  </section>
+  <section class="card">
+    <h2>First federal land sales · Section ${a.SECT}</h2>
+    ${patents.length?`<p class="hint" style="margin:0 0 6px">Every original purchase of public land in this square mile, from the U.S. General Land Office patent records. <span class="chip confirmed">federal record</span> These are the first private owners of the ground; everyone since bought from them or their heirs.${loc?` This lot sits in the ${aliquotLabel(loc.qq+loc.q).replace(/ \(40 acres\)/,'')} of Section ${a.SECT}.`:''}</p>
+    <ul class="timeline">${patents.map(p=>`<li${p.hit?' class="hit"':''}><span class="yr">${esc(p.date.slice(0,4))}</span>${p.hit?` <span class="chip confirmed">${p.hit==='lot'?'this quarter (fractional lot, likely)':'covers this lot'}</span>`:''}<br><span class="nm">${esc(p.names.join(' & '))}</span><br><span class="nt">${p.parts.map(q=>esc(aliquotLabel(q.al))).join('; ')} · patented ${esc(p.date)}${p.note?' · '+esc(p.note):''}</span><br><span class="nt">GLO doc ${esc(p.doc)} · <a href="${gloLink(p,a.SECT)}" target="_blank" rel="noopener">accession ${esc(p.acc)}</a></span></li>`).join('')}</ul>
+    <p class="hint">Dates are when the patent (the deed from the United States) issued, usually one to several years after the buyer paid at the Chicago land office. The Illinois State Archives' Public Domain Land Tract Sales index holds the purchase dates and prices.</p>`
+    :`<p>No federal patent data loaded for Township ${a.TOWN}N Range ${a.RANGE}E yet; the app currently carries T43N R12E (Highland Park, Highwood and Deerfield Township).</p>`}
+  </section>
+  <section class="card">
+    <h2>Research this lot</h2>
+    <ul class="links">
+      <li><a target="_blank" rel="noopener" href="https://apps.ilsos.gov/isa/pubdomsrch.jsp">Illinois Public Domain Land Tract Sales</a><small>First buyer from the U.S. government. Search Lake County, Township ${a.TOWN}N, Range ${a.RANGE}E, Section ${a.SECT}.</small></li>
+      <li><a target="_blank" rel="noopener" href="https://www.lakecountyil.gov/178/Recorder-of-Deeds">Lake County Recorder of Deeds</a><small>Plat of ${esc(subName||'the subdivision')} and the deed chain for PIN ${fmtPIN(pin)}${sales[0]&&sales[0][2]?`; latest document ${esc(sales[0][2])}`:''}.</small></li>
+      <li><a target="_blank" rel="noopener" href="https://maps.lakecountyil.gov/historicaerials/">Lake County historic aerials timeline</a><small>Type the address and press play to watch the lot from 1939 to today.</small></li>
+      <li><a target="_blank" rel="noopener" href="https://maps.lakecountyil.gov/GLO/">1840 Federal Township Plats</a><small>The original survey of Township ${a.TOWN}N Range ${a.RANGE}E before any farm existed.</small></li>
+      <li><a target="_blank" rel="noopener" href="https://highlandparkhistory.libraryhost.com/index.php/informationobject/browse?topLod=0&query=${encodeURIComponent((subName||a.situs_addr_line_1||'').split(';')[0])}">Highland Park Historical Society archive</a><small>Abstracts of title, photographs and plats; searching for "${esc((subName||'').split(';')[0])}".</small></li>
+      <li><a target="_blank" rel="noopener" href="https://hplibrary.org/obituary-index">Highland Park Public Library obituary &amp; newspaper indexes</a><small>Look up each name from the maps above.</small></li>
+      <li><a target="_blank" rel="noopener" href="https://npgallery.nps.gov/GetAsset/bd422496-4596-4f74-89ea-d60a5f77a273">1981 National Register survey of Highland Park</a><small>Contexts and a list of surveyed historic houses.</small></li>
+      <li><a target="_blank" rel="noopener" href="https://www.loc.gov/collections/sanborn-maps/?fa=location:lake+county%7Clocation:illinois&q=highland+park">Sanborn fire insurance maps (LOC)</a><small>Building footprints in town, 1900&ndash;1924.</small></li>
+    </ul>
+  </section>`;
+
+  $('#addName').addEventListener('submit', e=>{
+    e.preventDefault(); const f = new FormData(e.target);
+    userNames.push({trs, year:f.get('year'), name:f.get('name'), note:f.get('note'), conf:f.get('conf'), src:f.get('src')});
+    store.set('names', userNames); render(feat);
+  });
+}
+
+
+
+/* ---------- AI story (calls Anthropic directly; key stays in this browser) ---------- */
+const STORY_MODEL = 'claude-sonnet-5-5';
+async function tellStory(){
+  const key = store.get('apikey',''); if(!key){ document.getElementById('keyRow').hidden=false; document.getElementById('apikey').focus(); return; }
+  const body = document.getElementById('storyBody'); const btn = document.querySelector('button[data-s=tell]'); btn.disabled=true; btn.textContent='Writing…';
+  body.innerHTML = '<div class="story"><div class="meta">Writing… this takes 10 to 20 seconds</div></div>';
+  const facts = reportMD(current, true);
+  const system = `You are a local historian for Highland Park and Highwood, Illinois, writing for a homeowner. Write a short narrative (3 to 5 paragraphs, about 250 to 400 words) telling the story of the land under one house, from Potawatomi country and the Green Bay trail, through the first land patents and the farm families on the 19th-century maps, the subdivision era, to the present house. Use ONLY the facts supplied, plus well-established general Highland Park history (1833 treaty, Green Bay Road as post road 1832, incorporation 1869, Ravinia annexed 1899, 1920s annexations). Federal land patents (General Land Office records) are verified documents: treat the patentee marked as covering this lot as the proven first private owner and name them with confidence. Names transcribed from maps are unverified: say so plainly where you use them ("the maps show", "appears to have been"). Never invent owners, dates, prices or anecdotes. Do not restate every figure; weave the telling ones in. Plain, warm, specific prose. No headings, no bullet points, no preamble.`;
+  try{
+    const r = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+      body: JSON.stringify({ model:STORY_MODEL, max_tokens:3000, system, messages:[{role:'user', content:'Findings for this property:\n\n'+facts}] }) });
+    const data = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(r.status===401?'That API key was rejected. Check it and try again.':`Claude returned ${r.status}: ${(data.error&&data.error.message)||''}`.slice(0,220));
+    let text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    if(data.stop_reason==='max_tokens') text += '\n\n[The story reached its length limit here. Click "Rewrite the story" to try again.]';
+    if(!text.trim()) throw new Error('Claude returned an empty story. Try again.');
+    current.story = text.trim(); current.storyModel = STORY_MODEL;
+    try{ const saved = store.get('stories',{}); saved[current.pin] = {text:current.story, model:STORY_MODEL, when:Date.now()}; store.set('stories', saved); }catch(e){}
+    render(current.feat);
+  }catch(err){ body.innerHTML = `<p class="hint" style="color:var(--plat)">${esc(err.message==='Failed to fetch'?'Could not reach Claude. Check your connection or ad blocker.':err.message)}</p>`; btn.disabled=false; btn.textContent='Tell the story'; }
+}
+document.getElementById('result').addEventListener('click', e=>{
+  const b=e.target.closest('button[data-s]'); if(!b) return;
+  if(b.dataset.s==='tell') tellStory();
+  if(b.dataset.s==='key'){ const row=document.getElementById('keyRow'); row.hidden=!row.hidden; if(!row.hidden) document.getElementById('apikey').focus(); }
+  if(b.dataset.s==='savekey'){ const v=document.getElementById('apikey').value.trim(); if(v){ store.set('apikey', v); document.getElementById('keyRow').hidden=true; b.closest('section').querySelector('button[data-s=key]').textContent='Change API key'; setStatus('API key saved in this browser.'); } }
+});
+
+/* ---------- Export ---------- */
+function dl(name, text, type){ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; document.body.appendChild(a); a.click(); a.remove(); }
+function slug(s){ return String(s||'home').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''); }
+function reportMD(c, noStory){
+  const a=c.a, L=[];
+  L.push(`# ${a.situs_addr_line_1||'Parcel '+fmtPIN(c.pin)}`, `${a.MUNI_NAME||''}, ${a.TOWNSHIPNAME||''} Township, Lake County, Illinois`, '', `HomeRoots report generated ${c.when.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}. Parcel and lineage data: Lake County GIS and CCAO. Map names are transcriptions and are unverified unless marked confirmed.`, '');
+  if(c.story && !noStory){ L.push('## The story so far','', c.story, '', '_Narrative written by Claude ('+(c.storyModel||'')+') from the findings in this report; map-derived names are unverified._',''); }
+  L.push('## Where it sits','', `- **PIN:** ${fmtPIN(c.pin)}`, `- **Survey grid:** Section ${a.SECT}, Township ${a.TOWN} North, Range ${a.RANGE} East, 3rd Principal Meridian`, `- **PIN decoded:** ${c.pin.slice(0,2)} = ${a.TOWNSHIPNAME} township, ${c.pin.slice(2,4)} = section, ${c.pin.slice(4,7)} = block in the ${c.quarter} quarter, ${c.pin.slice(7)} = parcel`, `- **Lot size:** ${a.lot_area_acres?a.lot_area_acres.toFixed(3)+' acres':'n/a'}${a.ZONING?' · zoned '+a.ZONING:''}`, `- **Center:** ${c.ctr.lat.toFixed(6)}, ${c.ctr.lng.toFixed(6)}`, '');
+  L.push('## The lot','', `- **Legal description:** ${c.legal||'n/a'}`, `- **Recorded subdivision:** ${c.subs.length?c.subs.map(s=>s.Name+' ('+s.ConveyanceType+')').join('; '):'none mapped at this point'}`, `- **Year built:** ${a.improve_year_built||'n/a'}${a.stories?' · '+a.stories.toLowerCase():''}${a.const_type?' · '+a.const_type:''}`, `- **Class:** ${a.class_desc_pardat||'n/a'}`, '');
+  if(c.sales.length){ L.push('### Recent transfers (assessor)',''); c.sales.forEach(s=>L.push(`- ${fmtDate(s[0])}: ${fmtMoney(s[1])||'no price'}${s[2]?' (doc '+s[2]+')':''}`)); L.push(''); }
+  if(c.patents && c.patents.length){ L.push('## First federal land sales in Section '+a.SECT,''); if(c.loc) L.push('This lot sits in the '+aliquotLabel(c.loc.qq+c.loc.q).replace(/ \(40 acres\)/,'')+' of the section.',''); c.patents.forEach(p=>L.push(`- ${p.date} · ${p.names.join(' & ')} · ${p.parts.map(q=>aliquotLabel(q.al)).join('; ')}${p.hit?' · **covers this lot**':''} · GLO doc ${p.doc}, accession ${p.acc}`)); L.push('','_Source: U.S. Bureau of Land Management, General Land Office Records (federal land patents)._',''); }
+  L.push('## Parcel lineage, 1996 to today','');
+  if(c.hists.length){ c.hists.forEach(h=>L.push(`- ${fmtDate(h.DisplayStartDate)} to ${h.DisplayEndDate?fmtDate(h.DisplayEndDate):'present'}: PIN ${fmtPIN(h.PIN)}${h.PIN===c.pin?' (current)':''}`)); if(c.hists.every(h=>h.PIN!==c.pin)) L.push(`- current: PIN ${fmtPIN(c.pin)} (created by consolidation or split)`); } else L.push('- no historic parcel records returned');
+  L.push('', `## Names on the old maps, Section ${a.SECT}`, '', '| Year | Name | Note | Confidence | Source |', '|---|---|---|---|---|');
+  if(c.names.length) c.names.forEach(n=>L.push(`| ${n.year} | ${n.name} | ${n.note||''} | ${n.conf} | ${n.src} |`)); else L.push('| | no transcriptions yet | | | |');
+  L.push('', '## Research this lot','', `- Illinois Public Domain Land Tract Sales (Section ${a.SECT}, T${a.TOWN}N R${a.RANGE}E): https://apps.ilsos.gov/isa/pubdomsrch.jsp`, `- Lake County Recorder of Deeds (plat of ${c.subName||'the subdivision'}, deed chain for PIN ${fmtPIN(c.pin)}): https://www.lakecountyil.gov/178/Recorder-of-Deeds`, '- Lake County historic aerials: https://maps.lakecountyil.gov/historicaerials/', '- 1840 Federal Township Plats: https://maps.lakecountyil.gov/GLO/', `- Highland Park Historical Society archive: https://highlandparkhistory.libraryhost.com/index.php/informationobject/browse?topLod=0&query=${encodeURIComponent((c.subName||'').split(';')[0])}`, '- HPPL obituary and newspaper indexes: https://hplibrary.org/obituary-index', '- 1981 National Register survey: https://npgallery.nps.gov/GetAsset/bd422496-4596-4f74-89ea-d60a5f77a273', '', `Permalink: ${location.origin}${location.pathname}#${encodeURIComponent(fmtPIN(c.pin))}`);
+  return L.join('\n');
+}
+function reportHTML(c){
+  const a=c.a, e=esc;
+  const row=(k,v)=>`<tr><th>${k}</th><td>${v}</td></tr>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${e(a.situs_addr_line_1||fmtPIN(c.pin))} · HomeRoots report</title>
+<style>body{font:13px/1.5 "IBM Plex Sans",-apple-system,Segoe UI,sans-serif;color:#1d262d;max-width:760px;margin:32px auto;padding:0 20px}h1{font:700 26px/1.1 "Libre Caslon Text",Georgia,serif;margin:0 0 2px}h2{font:700 16px "Libre Caslon Text",Georgia,serif;border-top:1px solid #d5dbe0;padding-top:12px;margin:18px 0 6px}.sub{color:#56626b;margin:0 0 4px}.pin{font-family:"IBM Plex Mono",Menlo,monospace;color:#2d5f8b;font-size:15px}table{border-collapse:collapse;width:100%;margin:6px 0}th,td{text-align:left;vertical-align:top;padding:4px 8px;border-bottom:1px solid #e3e8ec;font-size:12.5px}th{width:160px;color:#56626b;font-weight:500}.names th{width:auto;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}.chip{font:500 10.5px "IBM Plex Mono",monospace;border:1px solid #c9d1d8;border-radius:999px;padding:0 6px;color:#56626b}.foot{color:#56626b;font-size:11.5px;margin-top:18px}a{color:#2d5f8b}.bar{display:flex;gap:8px;margin:0 0 16px}.bar button{font:500 13px -apple-system,sans-serif;padding:8px 14px;border:0;border-radius:6px;background:#b4322a;color:#fff;cursor:pointer}@media print{.bar{display:none}body{margin:0}}</style></head><body>
+<div class="bar"><button onclick="window.print()">Print or save as PDF</button></div>
+<div class="sub">${e(a.MUNI_NAME||'')} · ${e(a.TOWNSHIPNAME||'')} Township · Lake County, Illinois</div>
+<h1>${e(a.situs_addr_line_1||'Parcel '+fmtPIN(c.pin))}</h1>
+<div class="pin">PIN ${fmtPIN(c.pin)}</div>
+${c.story?`<h2>The story so far</h2>${c.story.split(/\n\s*\n/).map(p=>'<p>'+e(p)+'</p>').join('')}<p class="foot">Narrative written by Claude (${e(c.storyModel||'')}) from the findings in this report; names read from maps are unverified.</p>`:''}
+<h2>Where it sits</h2><table>
+${row('Survey grid',`Section ${a.SECT}, Township ${a.TOWN} North, Range ${a.RANGE} East, 3rd Principal Meridian`)}
+${row('PIN decoded',`${c.pin.slice(0,2)} = ${e(a.TOWNSHIPNAME)} township · ${c.pin.slice(2,4)} = section · ${c.pin.slice(4,7)} = block in the ${c.quarter} quarter · ${c.pin.slice(7)} = parcel`)}
+${row('Lot size',`${a.lot_area_acres?a.lot_area_acres.toFixed(3)+' acres':'n/a'}${a.ZONING?' · zoned '+e(a.ZONING):''}`)}
+${row('Center',`${c.ctr.lat.toFixed(6)}, ${c.ctr.lng.toFixed(6)}`)}</table>
+<h2>The lot</h2><table>
+${row('Legal description',e(c.legal||'n/a'))}
+${row('Recorded subdivision',c.subs.length?c.subs.map(s=>e(s.Name)+' <span class="chip">'+e(s.ConveyanceType)+'</span>').join('<br>'):'none mapped at this point')}
+${row('Year built',`${a.improve_year_built||'n/a'}${a.stories?' · '+e(a.stories.toLowerCase()):''}${a.const_type?' · '+e(a.const_type):''}`)}
+${row('Class',e(a.class_desc_pardat||'n/a'))}
+${c.sales.map(s=>row('Transfer',`${fmtDate(s[0])} · ${fmtMoney(s[1])||'no price'}${s[2]?' · doc '+e(s[2]):''}`)).join('')}</table>
+${c.patents&&c.patents.length?`<h2>First federal land sales in Section ${e(a.SECT)}</h2>${c.loc?`<p>This lot sits in the ${e(aliquotLabel(c.loc.qq+c.loc.q).replace(/ \(40 acres\)/,''))} of the section.</p>`:''}<table>${c.patents.map(p=>`<tr><td>${e(p.date)}</td><td>${e(p.names.join(' & '))}${p.hit?' <strong>(covers this lot)</strong>':''}</td><td>${e(p.parts.map(q=>aliquotLabel(q.al)).join('; '))}</td><td>GLO ${e(p.doc)} · ${e(p.acc)}</td></tr>`).join('')}</table><p class="foot">Source: U.S. Bureau of Land Management, General Land Office Records.</p>`:''}
+<h2>Parcel lineage, 1996 to today</h2><table>
+${c.hists.length?c.hists.map(h=>row(`${fmtDate(h.DisplayStartDate)} → ${h.DisplayEndDate?fmtDate(h.DisplayEndDate):'present'}`,`PIN ${fmtPIN(h.PIN)}${h.PIN===c.pin?' <span class="chip">current</span>':''}`)).join('')+(c.hists.every(h=>h.PIN!==c.pin)?row('current',`PIN ${fmtPIN(c.pin)} <span class="chip">created by consolidation or split</span>`):''):row('','no historic parcel records returned')}</table>
+<h2>Names on the old maps · Section ${a.SECT}</h2>
+<table class="names"><tr><th>Year</th><th>Name</th><th>Note</th><th>Confidence</th><th>Source</th></tr>
+${c.names.length?c.names.map(n=>`<tr><td>${e(n.year)}</td><td>${e(n.name)}</td><td>${e(n.note||'')}</td><td><span class="chip">${e(n.conf)}</span></td><td>${e(n.src)}</td></tr>`).join(''):'<tr><td colspan="5">No transcriptions yet for this section.</td></tr>'}</table>
+<p class="foot">read = read off a map scan, unverified · confirmed = backed by a record · inferred = reasoned from context. A deed or abstract of title is what proves ownership of this exact lot.</p>
+<h2>Research this lot</h2><ul>
+<li><a href="https://apps.ilsos.gov/isa/pubdomsrch.jsp">Illinois Public Domain Land Tract Sales</a> · Section ${a.SECT}, T${a.TOWN}N R${a.RANGE}E</li>
+<li><a href="https://www.lakecountyil.gov/178/Recorder-of-Deeds">Lake County Recorder of Deeds</a> · plat of ${e(c.subName||'the subdivision')}, deed chain for PIN ${fmtPIN(c.pin)}</li>
+<li><a href="https://maps.lakecountyil.gov/historicaerials/">Lake County historic aerials</a> · <a href="https://maps.lakecountyil.gov/GLO/">1840 Federal Township Plats</a></li>
+<li><a href="https://highlandparkhistory.libraryhost.com/index.php/informationobject/browse?topLod=0&query=${encodeURIComponent((c.subName||'').split(';')[0])}">Highland Park Historical Society archive</a> · <a href="https://hplibrary.org/obituary-index">HPPL obituary and newspaper indexes</a></li>
+<li><a href="https://npgallery.nps.gov/GetAsset/bd422496-4596-4f74-89ea-d60a5f77a273">1981 National Register survey of Highland Park</a></li></ul>
+<p class="foot">HomeRoots report generated ${c.when.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}. Parcel, subdivision and lineage data from Lake County GIS and the Chief County Assessment Office. Permalink: <a href="${location.origin}${location.pathname}#${encodeURIComponent(fmtPIN(c.pin))}">${location.origin}${location.pathname}#${fmtPIN(c.pin)}</a></p>
+</body></html>`;
+}
+document.getElementById('result').addEventListener('click', e=>{
+  const b=e.target.closest('button[data-x]'); if(!b||!current) return;
+  const base=slug(current.a.situs_addr_line_1||current.pin)+'-homeroots';
+  if(b.dataset.x==='md') dl(base+'.md', reportMD(current), 'text/markdown');
+  if(b.dataset.x==='json') dl(base+'.json', JSON.stringify({generated:current.when, parcel:current.a, geometry:current.feat.geometry, subdivisions:current.subs, lineage:current.hists, mapNames:current.names}, null, 2), 'application/json');
+  if(b.dataset.x==='print'){ const w=window.open('', '_blank'); if(w){ w.document.write(reportHTML(current)); w.document.close(); } else dl(base+'.html', reportHTML(current), 'text/html'); }
+  if(b.dataset.x==='link'){ const url=location.origin+location.pathname+'#'+encodeURIComponent(fmtPIN(current.pin)); const done=()=>{ b.textContent='Link copied'; setTimeout(()=>b.textContent='Copy link',1800); };
+    (navigator.clipboard?.writeText(url)||Promise.reject()).then(done).catch(()=>{ prompt('Copy this link', url); }); }
+});
+
+document.getElementById('searchForm').addEventListener('submit', e=>{ e.preventDefault(); lookup($('#q').value); });
+document.querySelectorAll('.hint a[data-q]').forEach(a=> a.addEventListener('click', e=>{ e.preventDefault(); $('#q').value = a.dataset.q; lookup(a.dataset.q); }));
+if(location.hash.length>1){ $('#q').value = decodeURIComponent(location.hash.slice(1)); }
+lookup($('#q').value);
+</script>
+</body>
+</html>
