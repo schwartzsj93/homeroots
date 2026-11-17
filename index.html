@@ -98,7 +98,38 @@ table.names th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:upp
 #yearrow{display:flex;gap:8px;align-items:center;padding:4px 0}
 #yearrow input{flex:1;accent-color:var(--plat)}
 #yearrow output{font:500 12px var(--mono);min-width:3.2em;text-align:right}
-#toggleLayers{position:absolute;top:12px;right:12px;z-index:1001;display:none}
+#toggleLayers{position:absolute;top:12px;right:12px;z-index:1001;box-shadow:0 2px 10px rgba(0,0,0,.15);background:var(--panel)}
+#layers{top:56px!important;max-height:calc(100% - 150px)!important}
+#layers.closed{display:none}
+/* Lot through time */
+.strip{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px 8px}
+.snap{margin:0;cursor:pointer;min-width:0}
+.snap canvas,.snap img,.snap .ph{width:100%;aspect-ratio:1;border-radius:6px;display:block;border:1px solid var(--rule);background:var(--bg)}
+.snap .ph{background:linear-gradient(90deg,var(--bg) 30%,var(--rule) 50%,var(--bg) 70%);background-size:300% 100%;animation:sh 1.3s infinite linear}
+@keyframes sh{from{background-position:100% 0}to{background-position:-200% 0}}
+.snap figcaption{font-size:11.5px;color:var(--ink-2);margin-top:4px;line-height:1.3;overflow-wrap:anywhere}
+.snap figcaption b{font:500 12px var(--mono);color:var(--survey);display:block}
+.snap:hover canvas,.snap:hover img,.snap:focus-visible canvas{outline:2px solid var(--survey);outline-offset:1px}
+.snap.miss{display:none}
+/* Time bar */
+#timebar{position:absolute;left:50%;transform:translateX(-50%);bottom:22px;z-index:1000;width:min(760px,calc(100% - 24px));background:var(--panel);border:1px solid var(--rule);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.16);padding:8px 12px 6px;display:flex;align-items:center;gap:12px}
+#timebar button.cmp{font:500 12px var(--sans);padding:7px 11px;border-radius:6px;border:1px solid var(--rule);background:transparent;color:var(--survey);cursor:pointer;white-space:nowrap}
+#timebar button.cmp[aria-pressed="true"]{background:var(--survey);color:#fff;border-color:var(--survey)}
+#timebar button.cmp:disabled{opacity:.4;cursor:default}
+.tb-track{position:relative;flex:1;min-width:0;padding-bottom:18px}
+.tb-track input{width:100%;margin:6px 0 0;accent-color:var(--plat);height:22px}
+.tb-ticks{position:absolute;left:0;right:0;bottom:0;height:16px}
+.tb-ticks button{position:absolute;transform:translateX(-50%);font:500 11px var(--mono);color:var(--ink-2);background:none;border:0;padding:0 2px;cursor:pointer;white-space:nowrap}
+.tb-ticks button.on{color:var(--plat);font-weight:600}
+.tb-fade{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--ink-2);white-space:nowrap}
+.tb-fade input{width:84px;accent-color:var(--survey)}
+.tb-fade.off{opacity:.4}
+#divider{position:absolute;top:0;bottom:0;width:0;z-index:950;pointer-events:none}
+#divider .dv-line{position:absolute;top:0;bottom:0;left:-1.5px;width:3px;background:#fff;box-shadow:0 0 6px rgba(0,0,0,.45)}
+#divider .dv-handle{position:absolute;top:45%;left:-22px;width:44px;height:44px;border-radius:50%;background:#fff;color:#1d262d;box-shadow:0 2px 10px rgba(0,0,0,.35);display:grid;place-items:center;font:600 13px var(--sans);pointer-events:auto;cursor:ew-resize;touch-action:none;user-select:none}
+#divider .dv-lab{position:absolute;top:12px;font:600 12px var(--mono);background:rgba(29,38,45,.82);color:#fff;padding:3px 8px;border-radius:4px;white-space:nowrap}
+#divider .dv-l{right:10px}#divider .dv-r{left:10px}
+@media (max-width:640px){ .tb-fade{display:none} #timebar{gap:8px;padding:6px 8px 4px} .tb-ticks button{font-size:10px} }
 .leaflet-container{font:inherit;background:var(--bg)}
 .leaflet-container a{color:var(--survey)}
 .leaflet-bar a{color:var(--ink)}
@@ -107,9 +138,6 @@ table.names th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:upp
   body{grid-template-columns:1fr;grid-template-rows:52vh 1fr}
   #map{order:-1;height:52vh}
   #panel{border-right:0;border-top:1px solid var(--rule);padding-right:max(16px,env(safe-area-inset-right,0px))}
-  #layers{display:none}
-  #layers.open{display:block}
-  #toggleLayers{display:block}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 </style>
@@ -136,7 +164,7 @@ table.names th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:upp
         <li><strong>Section-Township-Range</strong>: the 1830s federal survey grid every old map shares.</li>
         <li><strong>Chain of title</strong>: the ordered list of owners, proven by deeds and abstracts.</li>
       </ul>
-      <p>Use the layer panel on the map to fade the modern lot over the 1870s county map, Rudolph's 1909 map, the 1925 Windes &amp; Marsh map, the 1939 aerial and the county's 1996&ndash;2024 parcel history. The three scans are georeferenced to the county's section corners (within about 20 m). Press <em>Adjust placement</em> if you want to fine-tune one. Placements are saved in this browser and can be exported.</p>
+      <p>Use the time bar along the bottom of the map to step from the 1870s to today, or press <em>Compare</em> and drag the handle to wipe between an old map and the present. The <em>Layers</em> button opens the full panel. You can also fade the modern lot over the 1870s county map, Rudolph's 1909 map, the 1925 Windes &amp; Marsh map, the 1939 aerial and the county's 1996&ndash;2024 parcel history. The three scans are georeferenced to the county's section corners (within about 20 m). Press <em>Adjust placement</em> if you want to fine-tune one. Placements are saved in this browser and can be exported.</p>
     </section>
   </div>
 </aside>
@@ -224,6 +252,7 @@ let current = null;
 
 /* ---------- Map ---------- */
 const map = L.map('leaflet', { zoomControl:true }).setView([42.1835, -87.80], 13);
+const histPane = map.createPane('hist'); histPane.style.zIndex = 350;
 const bases = {
   osm: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Esri World Street Map' }),
   topo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Esri World Topo' }),
@@ -237,14 +266,14 @@ let histYear = 2000;
 function setHistYear(y){ histYear = y; const from = new Date(Date.UTC(y,0,1)), to = new Date(Date.UTC(y,11,31)); historicParcels.setTimeRange(from, to); }
 setHistYear(histYear);
 const AERIALS = [['1939','1939'],['1946','1946'],['1961','1961'],['1980cir','1980']];
-const aerialLayers = Object.fromEntries(AERIALS.map(([k,y])=>[k, L.tileLayer(SVC.aerialTiles.replace('{YEAR}',k), { maxNativeZoom:19, maxZoom:21, attribution:`${y} aerial, Lake County GIS` })]));
-L.control.scale({ imperial:true }).addTo(map);
+const aerialLayers = Object.fromEntries(AERIALS.map(([k,y])=>[k, L.tileLayer(SVC.aerialTiles.replace('{YEAR}',k), { maxNativeZoom:19, maxZoom:21, pane:'hist', attribution:`${y} aerial, Lake County GIS` })]));
+L.control.scale({ imperial:true, position:'topleft' }).addTo(map);
 
 const parcelLayer = L.geoJSON(null, { style:{ color:'#b4322a', weight:3, fillOpacity:.08 } }).addTo(map);
 const scanLayers = {};
 
 function addScan(s){
-  const img = L.distortableImageOverlay(s.src, { corners: cornersFor(s), selected:false, editable:false, mode:'distort', actions:[L.FreeRotateAction, L.DistortAction, L.ScaleAction, L.DragAction, L.LockAction, L.OpacityAction] });
+  const img = L.distortableImageOverlay(s.src, { corners: cornersFor(s), pane:'hist', selected:false, editable:false, mode:'distort', actions:[L.FreeRotateAction, L.DistortAction, L.ScaleAction, L.DragAction, L.LockAction, L.OpacityAction] });
   img.on('edit', ()=> savePlacement(s.id, img));
   img.on('dragend', ()=> savePlacement(s.id, img));
   scanLayers[s.id] = img; return img;
@@ -298,7 +327,6 @@ document.getElementById('layers').addEventListener('click', e=>{
   if(b.dataset.reset){ const s = SCANS.find(x=>x.id===b.dataset.reset); delete placements[s.id]; delete pendingPlacement[s.id]; store.set('placements3', placements); const l = scanLayers[s.id]; if(l && map.hasLayer(l)) l.setCorners(s.corners.map(c=>L.latLng(c[0],c[1]))); }
   if(b.dataset.fit){ let l = scanLayers[b.dataset.fit]; if(!map.hasLayer(l)){ document.getElementById('ly_'+b.dataset.fit).click(); l = scanLayers[b.dataset.fit]; } map.fitBounds(L.latLngBounds(l.getCorners())); }
 });
-document.getElementById('toggleLayers').addEventListener('click', ()=> document.getElementById('layers').classList.toggle('open'));
 document.getElementById('exportPl').addEventListener('click', ()=>{
   const blob = new Blob([JSON.stringify({placements, userNames}, null, 2)], {type:'application/json'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'homeroots-placements.json'; a.click();
@@ -361,7 +389,7 @@ if(location.protocol==='file:'){ setTimeout(()=>setStatus('Historical map images
 const RUD_PIECES = [{"f": "r0c0.jpg", "b": [[42.207585, -87.824731], [42.216082, -87.812826]]}, {"f": "r0c1.jpg", "b": [[42.207585, -87.812826], [42.216082, -87.800934]]}, {"f": "r0c2.jpg", "b": [[42.207585, -87.800934], [42.216082, -87.789029]]}, {"f": "r0c3.jpg", "b": [[42.207585, -87.789029], [42.216082, -87.777138]]}, {"f": "r0c4.jpg", "b": [[42.207585, -87.777138], [42.216082, -87.765233]]}, {"f": "r0c5.jpg", "b": [[42.207585, -87.765233], [42.216082, -87.753376]]}, {"f": "r1c0.jpg", "b": [[42.199083, -87.824731], [42.207585, -87.812826]]}, {"f": "r1c1.jpg", "b": [[42.199083, -87.812826], [42.207585, -87.800934]]}, {"f": "r1c2.jpg", "b": [[42.199083, -87.800934], [42.207585, -87.789029]]}, {"f": "r1c3.jpg", "b": [[42.199083, -87.789029], [42.207585, -87.777138]]}, {"f": "r1c4.jpg", "b": [[42.199083, -87.777138], [42.207585, -87.765233]]}, {"f": "r1c5.jpg", "b": [[42.199083, -87.765233], [42.207585, -87.753376]]}, {"f": "r2c0.jpg", "b": [[42.190584, -87.824731], [42.199083, -87.812826]]}, {"f": "r2c1.jpg", "b": [[42.190584, -87.812826], [42.199083, -87.800934]]}, {"f": "r2c2.jpg", "b": [[42.190584, -87.800934], [42.199083, -87.789029]]}, {"f": "r2c3.jpg", "b": [[42.190584, -87.789029], [42.199083, -87.777138]]}, {"f": "r2c4.jpg", "b": [[42.190584, -87.777138], [42.199083, -87.765233]]}, {"f": "r2c5.jpg", "b": [[42.190584, -87.765233], [42.199083, -87.753376]]}, {"f": "r3c0.jpg", "b": [[42.182084, -87.824731], [42.190584, -87.812826]]}, {"f": "r3c1.jpg", "b": [[42.182084, -87.812826], [42.190584, -87.800934]]}, {"f": "r3c2.jpg", "b": [[42.182084, -87.800934], [42.190584, -87.789029]]}, {"f": "r3c3.jpg", "b": [[42.182084, -87.789029], [42.190584, -87.777138]]}, {"f": "r3c4.jpg", "b": [[42.182084, -87.777138], [42.190584, -87.765233]]}, {"f": "r3c5.jpg", "b": [[42.182084, -87.765233], [42.190584, -87.753376]]}, {"f": "r4c0.jpg", "b": [[42.173583, -87.824731], [42.182084, -87.812826]]}, {"f": "r4c1.jpg", "b": [[42.173583, -87.812826], [42.182084, -87.800934]]}, {"f": "r4c2.jpg", "b": [[42.173583, -87.800934], [42.182084, -87.789029]]}, {"f": "r4c3.jpg", "b": [[42.173583, -87.789029], [42.182084, -87.777138]]}, {"f": "r4c4.jpg", "b": [[42.173583, -87.777138], [42.182084, -87.765233]]}, {"f": "r4c5.jpg", "b": [[42.173583, -87.765233], [42.182084, -87.753376]]}, {"f": "r5c0.jpg", "b": [[42.165078, -87.824731], [42.173583, -87.812826]]}, {"f": "r5c1.jpg", "b": [[42.165078, -87.812826], [42.173583, -87.800934]]}, {"f": "r5c2.jpg", "b": [[42.165078, -87.800934], [42.173583, -87.789029]]}, {"f": "r5c3.jpg", "b": [[42.165078, -87.789029], [42.173583, -87.777138]]}, {"f": "r5c4.jpg", "b": [[42.165078, -87.777138], [42.173583, -87.765233]]}, {"f": "r5c5.jpg", "b": [[42.165078, -87.765233], [42.173583, -87.753376]]}, {"f": "r6c0.jpg", "b": [[42.156575, -87.824731], [42.165078, -87.812826]]}, {"f": "r6c1.jpg", "b": [[42.156575, -87.812826], [42.165078, -87.800934]]}, {"f": "r6c2.jpg", "b": [[42.156575, -87.800934], [42.165078, -87.789029]]}, {"f": "r6c3.jpg", "b": [[42.156575, -87.789029], [42.165078, -87.777138]]}, {"f": "r6c4.jpg", "b": [[42.156575, -87.777138], [42.165078, -87.765233]]}, {"f": "r6c5.jpg", "b": [[42.156575, -87.765233], [42.165078, -87.753376]]}, {"f": "r7c0.jpg", "b": [[42.148086, -87.824731], [42.156575, -87.812826]]}, {"f": "r7c1.jpg", "b": [[42.148086, -87.812826], [42.156575, -87.800934]]}, {"f": "r7c2.jpg", "b": [[42.148086, -87.800934], [42.156575, -87.789029]]}, {"f": "r7c3.jpg", "b": [[42.148086, -87.789029], [42.156575, -87.777138]]}, {"f": "r7c4.jpg", "b": [[42.148086, -87.777138], [42.156575, -87.765233]]}, {"f": "r7c5.jpg", "b": [[42.148086, -87.765233], [42.156575, -87.753376]]}];
 const rudHi = L.layerGroup(); let rudHiBuilt=false;
 function rudHiOpacity(v){ rudHi.eachLayer(l=>l.setOpacity(v)); }
-function buildRudHi(){ if(rudHiBuilt) return; rudHiBuilt=true; RUD_PIECES.forEach(p=> L.imageOverlay(p.f+'?v=2', p.b, {opacity:+document.querySelector('#ly_rudolph1909r')?.closest('.lyr')?.querySelector('input[type=range]')?.value/100 || .75, interactive:false, className:'rudhi'}).addTo(rudHi)); }
+function buildRudHi(){ if(rudHiBuilt) return; rudHiBuilt=true; RUD_PIECES.forEach(p=> L.imageOverlay(p.f+'?v=2', p.b, {opacity:+document.querySelector('#ly_rudolph1909r')?.closest('.lyr')?.querySelector('input[type=range]')?.value/100 || .75, interactive:false, className:'rudhi', pane:'hist'}).addTo(rudHi)); }
 // Show the pieces instead of the single draggable image when zoomed in and the map has not been hand-adjusted
 function syncRudHi(){ const on = document.getElementById('ly_rudolph1909r')?.checked; const l = scanLayers['rudolph1909r']; const adjusted = !!(placements['rudolph1909r']||pendingPlacement['rudolph1909r']) || (l&&l.editing&&l.editing.enabled());
   const want = on && !adjusted && map.getZoom()>=14;
@@ -371,6 +399,157 @@ map.on('zoomend', syncRudHi);
 document.addEventListener('change', e=>{ if(e.target.id==='ly_rudolph1909r' || e.target.closest?.('#ly_rudolph1909r')) setTimeout(syncRudHi,50); });
 document.addEventListener('input', e=>{ const r=e.target; if(r.type==='range' && r.closest('.lyr')?.querySelector('#ly_rudolph1909r')) rudHiOpacity(+r.value/100); });
 document.addEventListener('click', e=>{ if(e.target.closest('button[data-adj],button[data-reset],#resetAll')) setTimeout(syncRudHi,100); });
+
+
+/* ---------- Your lot through time: same frame drawn from each map and aerial ---------- */
+const MR = 6378137, MPI = Math.PI*MR;
+const toM = (lat,lng)=>[lng*Math.PI/180*MR, Math.log(Math.tan(Math.PI/4+lat*Math.PI/360))*MR];
+const imgCache = {};
+function loadImg(src, cors){ if(imgCache[src]) return imgCache[src]; const p = new Promise(res=>{ const i=new Image(); if(cors) i.crossOrigin='anonymous'; i.onload=()=>res(i); i.onerror=()=>{ delete imgCache[src]; res(null); }; i.src=src; }); if(!cors) imgCache[src]=p; return p; }
+const ESRI_IMG = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const ESRI_TOPO = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}';
+const aerialURL = k => SVC.aerialTiles.replace('{YEAR}',k);
+const STRIP = [
+  {label:'1843', cap:'First owner', kind:'patent'},
+  {label:'1909', cap:"Rudolph's map", kind:'pieces', stop:'rudolph1909r'},
+  {label:'1925', cap:'Windes & Marsh map', kind:'scan', id:'windes1925', stop:'windes1925'},
+  {label:'1939', cap:'Aerial', kind:'tiles', url:aerialURL('1939'), stop:'a1939'},
+  {label:'1946', cap:'Aerial', kind:'tiles', url:aerialURL('1946'), stop:'a1946'},
+  {label:'1961', cap:'Aerial', kind:'tiles', url:aerialURL('1961'), stop:'a1961'},
+  {label:'1980', cap:'Aerial (infrared)', kind:'tiles', url:aerialURL('1980cir'), stop:'a1980cir'},
+  {label:'Today', cap:'Satellite', kind:'tiles', url:ESRI_IMG, stop:null}
+];
+const titleCase = s => String(s).toLowerCase().replace(/\b[a-z]/g, m=>m.toUpperCase());
+function frameFor(bounds, pad, minHalf){ const sw=toM(bounds.getSouth(),bounds.getWest()), ne=toM(bounds.getNorth(),bounds.getEast()); return {cx:(sw[0]+ne[0])/2, cy:(sw[1]+ne[1])/2, h:Math.max(Math.max(ne[0]-sw[0], ne[1]-sw[1])/2*pad, minHalf)}; }
+const proj = (f,S) => (x,y) => [(x-(f.cx-f.h))/(2*f.h)*S, ((f.cy+f.h)-y)/(2*f.h)*S];
+async function drawTiles(g, f, S, url, maxZ){
+  const frac = (2*f.h)/(2*MPI); let z = Math.ceil(Math.log2(S/(256*frac))); z = Math.max(10, Math.min(maxZ||19, z));
+  const tm = 2*MPI/2**z, p = proj(f,S);
+  const x0=Math.floor((f.cx-f.h+MPI)/tm), x1=Math.floor((f.cx+f.h+MPI)/tm), y0=Math.floor((MPI-(f.cy+f.h))/tm), y1=Math.floor((MPI-(f.cy-f.h))/tm);
+  const jobs=[]; let ok=0;
+  for(let tx=x0; tx<=x1; tx++) for(let ty=y0; ty<=y1; ty++) jobs.push(loadImg(url.replace('{z}',z).replace('{x}',tx).replace('{y}',ty), true).then(img=>{ if(!img) return; ok++; const [ax,ay]=p(tx*tm-MPI, MPI-ty*tm), [bx,by]=p((tx+1)*tm-MPI, MPI-(ty+1)*tm); g.drawImage(img, ax, ay, bx-ax, by-ay); }));
+  await Promise.all(jobs); return ok>0;
+}
+async function drawPieces(g, f, S){
+  const p = proj(f,S); const L0=f.cx-f.h, R0=f.cx+f.h, B0=f.cy-f.h, T0=f.cy+f.h; let ok=0;
+  await Promise.all(RUD_PIECES.map(pc=>{ const sw=toM(pc.b[0][0],pc.b[0][1]), ne=toM(pc.b[1][0],pc.b[1][1]);
+    if(ne[0]<L0||sw[0]>R0||ne[1]<B0||sw[1]>T0) return null;
+    return loadImg(pc.f+'?v=2', false).then(img=>{ if(!img) return; ok++; const [ax,ay]=p(sw[0],ne[1]), [bx,by]=p(ne[0],sw[1]); g.drawImage(img, ax, ay, bx-ax, by-ay); }); }));
+  return ok>0;
+}
+async function drawScan(g, f, S, s){
+  const img = await loadImg(s.src, false); if(!img) return false; const cs = cornersFor(s), p = proj(f,S);
+  const [NW,NE,SW] = [cs[0],cs[1],cs[2]].map(c=>p(...toM(c.lat,c.lng))); const W=img.naturalWidth, H=img.naturalHeight;
+  g.save(); g.setTransform((NE[0]-NW[0])/W, (NE[1]-NW[1])/W, (SW[0]-NW[0])/H, (SW[1]-NW[1])/H, NW[0], NW[1]); g.drawImage(img, 0, 0); g.restore(); return true;
+}
+function strokeRings(g, f, S, rings, width, color, dash){ const p=proj(f,S); g.save(); g.lineJoin='round'; g.lineWidth=width; g.strokeStyle=color; if(dash) g.setLineDash(dash); g.beginPath(); rings.forEach(ring=>ring.forEach(([lng,lat],i)=>{ const [x,y]=p(...toM(lat,lng)); i?g.lineTo(x,y):g.moveTo(x,y); })); g.closePath(); g.stroke(); g.restore(); }
+function lotRings(geom){ return geom.type==='Polygon' ? geom.coordinates : geom.type==='MultiPolygon' ? geom.coordinates.flat() : []; }
+function drawLot(g, f, S, geom){ const r = lotRings(geom); strokeRings(g,f,S,r,5,'rgba(255,255,255,.9)'); strokeRings(g,f,S,r,2.5,'#d0352b'); }
+const stripCache = {};
+let stripToken = 0;
+async function buildStrip(c){
+  const el = document.getElementById('strip'); if(!el) return;
+  const tok = ++stripToken, S = 300;
+  const lotB = L.geoJSON(c.feat).getBounds(), f = frameFor(lotB, 3.2, 150);
+  const cached = stripCache[c.pin];
+  c.snaps = cached ? cached.slice() : [];
+  STRIP.forEach((st, i)=>{
+    if(st.kind==='patent' && !(c.patentRects && c.patentRects.length)) return;
+    const who = st.kind==='patent' ? titleCase(c.patentRects[0].names.join(' & ')) : st.cap;
+    const fig = document.createElement('figure'); fig.className='snap'; fig.tabIndex=0; fig.dataset.i=i;
+    fig.innerHTML = `<div class="ph"></div><figcaption><b>${esc(st.label)}</b>${esc(who)}</figcaption>`; el.appendChild(fig);
+    fig.addEventListener('click', ()=> openSnap(st, c));
+    fig.addEventListener('keydown', e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openSnap(st, c); } });
+    if(cached && cached[i]){ const im = new Image(); im.src = cached[i].url; im.alt = st.label; fig.querySelector('.ph').replaceWith(im); return; }
+    (async ()=>{
+      const cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d'); g.fillStyle='#e9e4d8'; g.fillRect(0,0,S,S);
+      let ok = false, fr = f;
+      try{
+        if(st.kind==='patent'){ const pb = L.latLngBounds([]); c.patentRects.forEach(r=>pb.extend(r.b)); fr = frameFor(pb, 1.12, 75); ok = await drawTiles(g, fr, S, ESRI_TOPO, 18);
+          c.patentRects.forEach(r=>{ const [[s,w],[n,e]] = r.b; const ring=[[[w,s],[e,s],[e,n],[w,n],[w,s]]]; const p=proj(fr,S); g.save(); g.fillStyle='rgba(176,122,22,.18)'; const [ax,ay]=p(...toM(n,w)), [bx,by]=p(...toM(s,e)); g.fillRect(ax,ay,bx-ax,by-ay); g.restore(); strokeRings(g,fr,S,ring,2.5,'#8a6d1f',[7,5]); }); }
+        else if(st.kind==='pieces') ok = await drawPieces(g, f, S);
+        else if(st.kind==='scan') ok = await drawScan(g, f, S, SCANS.find(s=>s.id===st.id));
+        else { ok = await drawTiles(g, f, S, st.url, 19);
+          if(ok){ try{ const d = g.getImageData(0,0,S,S).data; let w=0; for(let k=0;k<d.length;k+=16){ if(d[k]>248&&d[k+1]>248&&d[k+2]>248) w++; } if(w/(d.length/16) > .9) ok = false; }catch(e){} } }
+        drawLot(g, fr, S, c.feat.geometry);
+      }catch(e){ ok = false; }
+      if(tok !== stripToken && !document.body.contains(fig)) return;
+      if(!ok){ fig.classList.add('miss'); return; }
+      fig.querySelector('.ph').replaceWith(cv);
+      try{ const url = cv.toDataURL('image/jpeg', .85); const snap = {label:st.label, cap:who, url}; c.snaps[i] = snap; (stripCache[c.pin] ||= [])[i] = snap; }catch(e){ /* tiles without CORS: shown, not exportable */ }
+    })();
+  });
+}
+function openSnap(st, c){
+  if(st.kind==='patent'){ setStop(STOPS.length-1); const pb=L.latLngBounds([]); c.patentRects.forEach(r=>pb.extend(r.b)); map.fitBounds(pb.pad(.15)); }
+  else { setStop(Math.max(0, STOPS.findIndex(s=>s.id===st.stop))); map.fitBounds(L.geoJSON(c.feat).getBounds().pad(1.4)); }
+  if(window.matchMedia('(max-width:860px)').matches) document.getElementById('map').scrollIntoView({behavior:'smooth'});
+}
+
+/* ---------- Time bar: one control for every historical layer, plus a swipe compare ---------- */
+const STOPS = [
+  {y:'1873', id:'lc1870s'}, {y:'1909', id:'rudolph1909r'}, {y:'1925', id:'windes1925'},
+  {y:'1939', id:'a1939'}, {y:'1946', id:'a1946'}, {y:'1961', id:'a1961'}, {y:'1980', id:'a1980cir'}, {y:'Today', id:null}
+];
+let stopIdx = STOPS.length-1, cmpOn = false, divX = null, stopTimer = null;
+const mapEl = document.getElementById('map');
+const bar = document.createElement('div'); bar.id = 'timebar';
+bar.innerHTML = `<button type="button" class="cmp" id="cmpBtn" aria-pressed="false" title="Wipe between this year and today">Compare</button>
+  <div class="tb-track"><input type="range" id="tbRange" min="0" max="${STOPS.length-1}" step="1" value="${STOPS.length-1}" aria-label="Map year">
+  <div class="tb-ticks">${STOPS.map((s,i)=>`<button type="button" data-i="${i}" style="left:calc(9px + ${i/(STOPS.length-1)} * (100% - 18px))">${s.y}</button>`).join('')}</div></div>
+  <label class="tb-fade">Fade <input type="range" id="tbFade" min="0" max="100" value="75" aria-label="Opacity of the selected year"></label>`;
+mapEl.appendChild(bar);
+L.DomEvent.disableClickPropagation(bar); L.DomEvent.disableScrollPropagation(bar);
+const divider = document.createElement('div'); divider.id='divider'; divider.hidden=true;
+divider.innerHTML = '<div class="dv-line"></div><span class="dv-lab dv-l"></span><span class="dv-lab dv-r">Today</span><div class="dv-handle" role="slider" aria-label="Drag to compare" tabindex="0">◀▶</div>';
+mapEl.appendChild(divider);
+const tbRange = bar.querySelector('#tbRange'), tbFade = bar.querySelector('#tbFade'), cmpBtn = bar.querySelector('#cmpBtn');
+const rowRange = id => document.getElementById('ly_'+id)?.closest('.lyr')?.querySelector('input[type=range]');
+function setStop(i){
+  stopIdx = i;
+  STOPS.forEach((s,j)=>{ if(!s.id) return; const cb = document.getElementById('ly_'+s.id); if(cb && cb.checked !== (j===i)) cb.click(); });
+  syncBar();
+}
+function syncBar(){
+  tbRange.value = stopIdx;
+  bar.querySelectorAll('.tb-ticks button').forEach((b,j)=> b.classList.toggle('on', j===stopIdx));
+  const s = STOPS[stopIdx], r = s.id && rowRange(s.id);
+  tbFade.disabled = !r; bar.querySelector('.tb-fade').classList.toggle('off', !r); if(r) tbFade.value = r.value;
+  cmpBtn.disabled = !s.id; if(!s.id && cmpOn) setCompare(false);
+  divider.querySelector('.dv-l').textContent = s.y;
+}
+tbRange.addEventListener('input', ()=>{ clearTimeout(stopTimer); const i=+tbRange.value; bar.querySelectorAll('.tb-ticks button').forEach((b,j)=> b.classList.toggle('on', j===i)); stopTimer = setTimeout(()=> setStop(i), 90); });
+bar.querySelector('.tb-ticks').addEventListener('click', e=>{ const b=e.target.closest('button[data-i]'); if(b) setStop(+b.dataset.i); });
+tbFade.addEventListener('input', ()=>{ const s=STOPS[stopIdx], r=s.id && rowRange(s.id); if(!r) return; r.value = tbFade.value; r.dispatchEvent(new Event('input', {bubbles:true})); });
+// Keep the bar in step when layers are switched in the panel
+histGrp.addEventListener('change', ()=>{ const on = STOPS.map((s,j)=> s.id && document.getElementById('ly_'+s.id)?.checked ? j : -1).filter(j=>j>=0);
+  if(on.length===1) stopIdx = on[0]; else if(on.length===0) stopIdx = STOPS.length-1; syncBar(); });
+// Swipe compare: historical layers live in their own pane, which is clipped at the divider
+function clipHist(){
+  if(!cmpOn){ histPane.style.clip=''; return; }
+  const size = map.getSize(); if(divX==null) divX = size.x/2; divX = Math.max(0, Math.min(size.x, divX));
+  const nw = map.containerPointToLayerPoint([0,0]), se = map.containerPointToLayerPoint(size);
+  histPane.style.clip = `rect(${nw.y}px, ${nw.x+divX}px, ${se.y}px, ${nw.x}px)`; divider.style.left = divX+'px';
+}
+function setCompare(on){ cmpOn = on; cmpBtn.setAttribute('aria-pressed', on); divider.hidden = !on; if(on){ const r=rowRange(STOPS[stopIdx].id); if(r && +r.value<100){ r.value=100; r.dispatchEvent(new Event('input',{bubbles:true})); tbFade.value=100; } } clipHist(); }
+cmpBtn.addEventListener('click', ()=> setCompare(!cmpOn));
+map.on('move zoom zoomend resize viewreset', clipHist);
+(function(){ const hd = divider.querySelector('.dv-handle'); let drag=false;
+  const at = e=>{ const r = map.getContainer().getBoundingClientRect(); divX = e.clientX - r.left; clipHist(); };
+  hd.addEventListener('pointerdown', e=>{ e.preventDefault(); e.stopPropagation(); drag=true; hd.setPointerCapture(e.pointerId); map.dragging.disable(); });
+  hd.addEventListener('pointermove', e=>{ if(drag) at(e); });
+  const end = e=>{ if(!drag) return; drag=false; try{ hd.releasePointerCapture(e.pointerId) }catch(x){} map.dragging.enable(); };
+  hd.addEventListener('pointerup', end); hd.addEventListener('pointercancel', end);
+  hd.addEventListener('keydown', e=>{ if(e.key==='ArrowLeft'||e.key==='ArrowRight'){ e.preventDefault(); divX = (divX??map.getSize().x/2) + (e.key==='ArrowLeft'?-24:24); clipHist(); } });
+})();
+syncBar();
+
+/* ---------- Layer panel: a button opens and closes it; closed by default on touch screens ---------- */
+(function(){ const p = document.getElementById('layers'), b = document.getElementById('toggleLayers');
+  const saved = store.get('layersOpen', null); const open = saved==null ? !(window.matchMedia('(pointer:coarse)').matches || innerWidth < 1100) : saved;
+  const set = o=>{ p.classList.toggle('closed', !o); b.textContent = o ? 'Hide layers' : 'Layers'; b.setAttribute('aria-expanded', o); };
+  set(open); b.addEventListener('click', ()=>{ const o = p.classList.contains('closed'); set(o); store.set('layersOpen', o); });
+})();
 
 /* ---------- Lookup ---------- */
 const $ = s=>document.querySelector(s);
@@ -425,7 +604,7 @@ async function render(feat){
   const hists = (hist.features||[]).map(f=>f.attributes);
 
   // Federal land patents for this section, and which one covered this lot
-  let patents = [], secBox = null, loc = null;
+  let patents = [], secBox = null, loc = null, patentRects = [];
   if(+a.TOWN===GLO_TRS.town && +a.RANGE===GLO_TRS.range){
     const sec = +a.SECT;
     try{ const sg = await getJSON(`${SVC.sections}?where=TWP%3D${a.TOWN}%20AND%20RNG%3D${a.RANGE}%20AND%20SEC%3D${sec}&outFields=TWP,RNG,SEC&returnGeometry=true&outSR=4326&f=geojson`);
@@ -433,7 +612,7 @@ async function render(feat){
     patents = PATENTS.filter(p=>p.parcels.some(q=>q.sec===sec)).map(p=>{ const parts = p.parcels.filter(q=>q.sec===sec); const hit = loc ? parts.map(q=>aliquotMatch(q.al, loc)).find(Boolean) : null; return {...p, parts, hit:hit||null}; });
     patents.sort((x,y)=> (y.hit?1:0)-(x.hit?1:0) || x.date.localeCompare(y.date));
     patentLayer.clearLayers();
-    if(secBox) patents.filter(p=>p.hit).forEach(p=>p.parts.forEach(q=>{ const bnd=aliquotBounds(q.al, secBox); if(bnd) L.rectangle(bnd,{color:'#8a6d1f',weight:1.5,dashArray:'6 4',fill:true,fillOpacity:.06}).bindTooltip(`${p.names.join(' & ')} · ${q.al} · ${p.date.slice(0,4)}`,{sticky:true}).addTo(patentLayer); }));
+    if(secBox) patents.filter(p=>p.hit).forEach(p=>p.parts.forEach(q=>{ const bnd=aliquotBounds(q.al, secBox); if(bnd) patentRects.push({b:bnd, names:p.names, date:p.date, al:q.al}); if(bnd) L.rectangle(bnd,{color:'#8a6d1f',weight:1.5,dashArray:'6 4',fill:true,fillOpacity:.06}).bindTooltip(`${p.names.join(' & ')} · ${q.al} · ${p.date.slice(0,4)}`,{sticky:true}).addTo(patentLayer); }));
   }
 
   const names = [...SEED_NAMES, ...userNames].filter(n=>n.trs===trs).sort((x,y)=> (parseInt(x.year.replace(/\D/g,''))||0)-(parseInt(y.year.replace(/\D/g,''))||0));
@@ -442,7 +621,7 @@ async function render(feat){
   const sales = [[a.sale_date1,a.sale_amt1,a.doc_num1],[a.sale_date2,a.sale_amt2,a.doc_num2]].filter(s=>s[0]).sort((x,y)=>y[0]-x[0]);
   const prev = current && current.pin===pin ? current : null;
   const savedStory = (store.get('stories',{})||{})[pin];
-  current = { a, feat, trs, pin, quarter, subs, hists, names, legal, subName, sales, ctr, patents, loc, when:new Date(), story: prev?.story||savedStory?.text||null, storyModel: prev?.storyModel||savedStory?.model||null };
+  current = { a, feat, trs, pin, quarter, subs, hists, names, legal, subName, sales, ctr, patents, loc, patentRects, when:new Date(), story: prev?.story||savedStory?.text||null, storyModel: prev?.storyModel||savedStory?.model||null };
 
   $('#result').innerHTML = `
   <section class="card">
@@ -456,6 +635,11 @@ async function render(feat){
       <dt>Lot size</dt><dd>${a.lot_area_acres?a.lot_area_acres.toFixed(3)+' acres':'—'}${a.ZONING?` · zoned ${esc(a.ZONING)}`:''}</dd>
       <dt>USGS quad</dt><dd>${esc(a.USGS_QUAD||'—')}</dd>
     </dl>
+  </section>
+  <section class="card">
+    <h2>Your lot through time</h2>
+    <p class="hint" style="margin:0 0 8px">The same patch of ground on each map and aerial, with today's lot outlined. Tap one to open it on the map.</p>
+    <div class="strip" id="strip"></div>
   </section>
   <section class="card">
     <h2>The lot</h2>
@@ -516,6 +700,7 @@ async function render(feat){
     userNames.push({trs, year:f.get('year'), name:f.get('name'), note:f.get('note'), conf:f.get('conf'), src:f.get('src')});
     store.set('names', userNames); render(feat);
   });
+  buildStrip(current);
 }
 
 
@@ -570,12 +755,13 @@ function reportHTML(c){
   const a=c.a, e=esc;
   const row=(k,v)=>`<tr><th>${k}</th><td>${v}</td></tr>`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${e(a.situs_addr_line_1||fmtPIN(c.pin))} · HomeRoots report</title>
-<style>body{font:13px/1.5 "IBM Plex Sans",-apple-system,Segoe UI,sans-serif;color:#1d262d;max-width:760px;margin:32px auto;padding:0 20px}h1{font:700 26px/1.1 "Libre Caslon Text",Georgia,serif;margin:0 0 2px}h2{font:700 16px "Libre Caslon Text",Georgia,serif;border-top:1px solid #d5dbe0;padding-top:12px;margin:18px 0 6px}.sub{color:#56626b;margin:0 0 4px}.pin{font-family:"IBM Plex Mono",Menlo,monospace;color:#2d5f8b;font-size:15px}table{border-collapse:collapse;width:100%;margin:6px 0}th,td{text-align:left;vertical-align:top;padding:4px 8px;border-bottom:1px solid #e3e8ec;font-size:12.5px}th{width:160px;color:#56626b;font-weight:500}.names th{width:auto;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}.chip{font:500 10.5px "IBM Plex Mono",monospace;border:1px solid #c9d1d8;border-radius:999px;padding:0 6px;color:#56626b}.foot{color:#56626b;font-size:11.5px;margin-top:18px}a{color:#2d5f8b}.bar{display:flex;gap:8px;margin:0 0 16px}.bar button{font:500 13px -apple-system,sans-serif;padding:8px 14px;border:0;border-radius:6px;background:#b4322a;color:#fff;cursor:pointer}@media print{.bar{display:none}body{margin:0}}</style></head><body>
+<style>body{font:13px/1.5 "IBM Plex Sans",-apple-system,Segoe UI,sans-serif;color:#1d262d;max-width:760px;margin:32px auto;padding:0 20px}h1{font:700 26px/1.1 "Libre Caslon Text",Georgia,serif;margin:0 0 2px}h2{font:700 16px "Libre Caslon Text",Georgia,serif;border-top:1px solid #d5dbe0;padding-top:12px;margin:18px 0 6px}.sub{color:#56626b;margin:0 0 4px}.pin{font-family:"IBM Plex Mono",Menlo,monospace;color:#2d5f8b;font-size:15px}table{border-collapse:collapse;width:100%;margin:6px 0}th,td{text-align:left;vertical-align:top;padding:4px 8px;border-bottom:1px solid #e3e8ec;font-size:12.5px}th{width:160px;color:#56626b;font-weight:500}.names th{width:auto;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase}.chip{font:500 10.5px "IBM Plex Mono",monospace;border:1px solid #c9d1d8;border-radius:999px;padding:0 6px;color:#56626b}.foot{color:#56626b;font-size:11.5px;margin-top:18px}a{color:#2d5f8b}.bar{display:flex;gap:8px;margin:0 0 16px}.bar button{font:500 13px -apple-system,sans-serif;padding:8px 14px;border:0;border-radius:6px;background:#b4322a;color:#fff;cursor:pointer}@media print{.bar{display:none}body{margin:0}}.snaps{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:8px 0}.snaps figure{margin:0;break-inside:avoid}.snaps img{width:100%;border:1px solid #d5dbe0;border-radius:4px;display:block}.snaps figcaption{font-size:11px;color:#56626b;margin-top:3px}</style></head><body>
 <div class="bar"><button onclick="window.print()">Print or save as PDF</button></div>
 <div class="sub">${e(a.MUNI_NAME||'')} · ${e(a.TOWNSHIPNAME||'')} Township · Lake County, Illinois</div>
 <h1>${e(a.situs_addr_line_1||'Parcel '+fmtPIN(c.pin))}</h1>
 <div class="pin">PIN ${fmtPIN(c.pin)}</div>
 ${c.story?`<h2>The story so far</h2>${c.story.split(/\n\s*\n/).map(p=>'<p>'+e(p)+'</p>').join('')}<p class="foot">Narrative written by Claude (${e(c.storyModel||'')}) from the findings in this report; names read from maps are unverified.</p>`:''}
+${c.snaps&&c.snaps.filter(Boolean).length?`<h2>Your lot through time</h2><div class="snaps">${c.snaps.filter(Boolean).map(s=>`<figure><img src="${s.url}" alt="${e(s.label)}"><figcaption><b>${e(s.label)}</b> · ${e(s.cap)}</figcaption></figure>`).join('')}</div>`:''}
 <h2>Where it sits</h2><table>
 ${row('Survey grid',`Section ${a.SECT}, Township ${a.TOWN} North, Range ${a.RANGE} East, 3rd Principal Meridian`)}
 ${row('PIN decoded',`${c.pin.slice(0,2)} = ${e(a.TOWNSHIPNAME)} township · ${c.pin.slice(2,4)} = section · ${c.pin.slice(4,7)} = block in the ${c.quarter} quarter · ${c.pin.slice(7)} = parcel`)}
