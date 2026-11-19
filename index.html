@@ -116,7 +116,7 @@ table.names th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:upp
 #timebar button.cmp{font:500 12px var(--sans);padding:7px 11px;border-radius:6px;border:1px solid var(--rule);background:transparent;color:var(--survey);cursor:pointer;white-space:nowrap}
 #timebar button.cmp[aria-pressed="true"]{background:var(--survey);color:#fff;border-color:var(--survey)}
 #timebar button.cmp:disabled{opacity:.4;cursor:default}
-.leaflet-ground-pane img{filter:contrast(2.6) brightness(1.06)}
+.leaflet-ground-pane img{filter:contrast(1.15)}
 .snap .tag{font:500 10px var(--mono);color:var(--ink-2);margin-left:4px}
 .tb-track{position:relative;flex:1;min-width:0;padding-bottom:18px}
 .tb-track input{width:100%;margin:6px 0 0;accent-color:var(--plat);height:22px}
@@ -260,7 +260,8 @@ const map = L.map('leaflet', { zoomControl:true }).setView([42.1835, -87.80], 13
 const histPane = map.createPane('hist'); histPane.style.zIndex = 350;
 const groundPane = map.createPane('ground'); groundPane.style.zIndex = 300;
 const LIDAR = 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer';
-const groundLayer = L.esri.imageMapLayer({ url:LIDAR, renderingRule:{ rasterFunction:'Hillshade Multidirectional' }, format:'png', pane:'ground', opacity:.9, attribution:'Bare earth: USGS 3DEP lidar (Lake County 2017)' });
+const GROUND_RULE = { rasterFunction:'Hillshade', rasterFunctionArguments:{ HillshadeType:1, Altitude:30, ZFactor:10 } };
+const groundLayer = L.esri.imageMapLayer({ url:LIDAR, renderingRule:GROUND_RULE, format:'png', pane:'ground', opacity:.9, attribution:'Bare earth: USGS 3DEP lidar (Lake County 2017)' });
 const bases = {
   osm: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Esri World Street Map' }),
   topo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom:19, attribution:'Esri World Topo' }),
@@ -320,7 +321,7 @@ SCANS.forEach(s=>{
 });
 (function(){ const d=document.createElement('div'); d.className='hint'; d.style.cssText='padding:4px 0 8px'; d.innerHTML='<a href="#" id="resetAll">Reset all maps to their surveyed positions</a>'; histGrp.appendChild(d); d.querySelector('a').onclick=e=>{ e.preventDefault(); placements={}; pendingPlacement={}; store.set('placements3',{}); SCANS.forEach(s=>{ const l=scanLayers[s.id]; if(l && map.hasLayer(l)){ try{ l.editing&&l.editing.enabled()&&l.editing.disable(); }catch(x){} l.setCorners(s.corners.map(c=>L.latLng(c[0],c[1]))); } }); document.querySelectorAll('button[data-adj]').forEach(b=>{ b.classList.remove('on'); b.textContent='Adjust placement'; }); setStatus('All maps reset.'); }; })();
 AERIALS.forEach(([k,y])=>{ const ly = aerialLayers[k]; layerRow(histGrp, { id:'a'+k, title: k==='1980cir'?'Aerial photography (color infrared)':'Aerial photography', year:y, on:false, opacity:true, toggle:on=> on?ly.addTo(map):map.removeLayer(ly), setOpacity:v=>ly.setOpacity(v) }); });
-layerRow(countyGrp, { id:'ground', title:'Bare earth (lidar): ground with trees and buildings removed', year:'2017', on:false, opacity:true, startOpacity:.9, toggle:on=>{ on?groundLayer.addTo(map):map.removeLayer(groundLayer); syncGroundBtn(); }, setOpacity:v=>groundLayer.setOpacity(v) });
+layerRow(countyGrp, { id:'ground', title:'Bare earth (lidar): ground with trees and buildings removed', year:'2017', on:false, opacity:true, startOpacity:.9, toggle:on=>{ on?groundLayer.addTo(map):map.removeLayer(groundLayer); syncGroundBtn(); if(!on){ const b=document.getElementById('groundBtn'); if(b) b.textContent='Ground'; } }, setOpacity:v=>groundLayer.setOpacity(v) });
 layerRow(countyGrp, { id:'plines', title:'Current tax parcel lines', year:'2025', on:true, opacity:false, toggle:on=> on?parcelLines.addTo(map):map.removeLayer(parcelLines) });
 parcelLines.addTo(map);
 layerRow(countyGrp, { id:'hparc', title:'Historic tax parcels', year:'1996–2024', on:false, opacity:true, toggle:on=> on?historicParcels.addTo(map):map.removeLayer(historicParcels), setOpacity:v=>historicParcels.setOpacity(v),
@@ -481,8 +482,8 @@ async function buildStrip(c){
           c.patentRects.forEach(r=>{ const [[s,w],[n,e]] = r.b; const ring=[[[w,s],[e,s],[e,n],[w,n],[w,s]]]; const p=proj(fr,S); g.save(); g.fillStyle='rgba(176,122,22,.18)'; const [ax,ay]=p(...toM(n,w)), [bx,by]=p(...toM(s,e)); g.fillRect(ax,ay,bx-ax,by-ay); g.restore(); strokeRings(g,fr,S,ring,2.5,'#8a6d1f',[7,5]); }); }
         else if(st.kind==='pieces') ok = await drawPieces(g, f, S);
         else if(st.kind==='scan') ok = await drawScan(g, f, S, SCANS.find(s=>s.id===st.id));
-        else if(st.kind==='lidar'){ const img = await loadImg(`${LIDAR}/exportImage?bbox=${f.cx-f.h},${f.cy-f.h},${f.cx+f.h},${f.cy+f.h}&bboxSR=3857&imageSR=3857&size=${S},${S}&format=png&renderingRule=${encodeURIComponent(JSON.stringify({rasterFunction:'Hillshade Multidirectional'}))}&f=image`, true);
-          if(img){ g.filter='contrast(2.6) brightness(1.06)'; g.drawImage(img,0,0,S,S); g.filter='none'; ok=true; } }
+        else if(st.kind==='lidar'){ const img = await loadImg(`${LIDAR}/exportImage?bbox=${f.cx-f.h},${f.cy-f.h},${f.cx+f.h},${f.cy+f.h}&bboxSR=3857&imageSR=3857&size=${S},${S}&format=png&renderingRule=${encodeURIComponent(JSON.stringify(GROUND_RULE))}&f=image`, true);
+          if(img){ g.filter='contrast(1.15)'; g.drawImage(img,0,0,S,S); g.filter='none'; ok=true; } }
         else { ok = await drawTiles(g, f, S, st.url, 19);
           if(ok){ try{ const d = g.getImageData(0,0,S,S).data; let w=0; for(let k=0;k<d.length;k+=16){ if(d[k]>248&&d[k+1]>248&&d[k+2]>248) w++; } if(w/(d.length/16) > .9) ok = false; }catch(e){} } }
         drawLot(g, fr, S, c.feat.geometry);
@@ -551,6 +552,8 @@ function setCompare(on){ cmpOn = on; cmpBtn.setAttribute('aria-pressed', on); di
 cmpBtn.addEventListener('click', ()=> setCompare(!cmpOn));
 function syncGroundBtn(){ const b=document.getElementById('groundBtn'); if(b) b.setAttribute('aria-pressed', map.hasLayer(groundLayer)); }
 bar.querySelector('#groundBtn').addEventListener('click', ()=> document.getElementById('ly_ground').click());
+groundLayer.on('loading', ()=>{ const b=document.getElementById('groundBtn'); if(b){ b.textContent='Ground…'; b.title='Loading the lidar surface (takes a few seconds)'; } });
+groundLayer.on('load', ()=>{ const b=document.getElementById('groundBtn'); if(b){ b.textContent='Ground'; b.title='Show the bare ground surface from 2017 lidar under any year'; } });
 map.on('move zoom zoomend resize viewreset', clipHist);
 (function(){ const hd = divider.querySelector('.dv-handle'); let drag=false;
   const at = e=>{ const r = map.getContainer().getBoundingClientRect(); divX = e.clientX - r.left; clipHist(); };
