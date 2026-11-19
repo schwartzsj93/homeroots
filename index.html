@@ -164,7 +164,7 @@ table.names th{font:500 11px var(--mono);letter-spacing:.06em;text-transform:upp
         <li><strong>Section-Township-Range</strong>: the 1830s federal survey grid every old map shares.</li>
         <li><strong>Chain of title</strong>: the ordered list of owners, proven by deeds and abstracts.</li>
       </ul>
-      <p>Use the time bar along the bottom of the map to step from the 1870s to today, or press <em>Compare</em> and drag the handle to wipe between an old map and the present. The <em>Layers</em> button opens the full panel. You can also fade the modern lot over the 1870s county map, Rudolph's 1909 map, the 1925 Windes &amp; Marsh map, the 1939 aerial and the county's 1996&ndash;2024 parcel history. The three scans are georeferenced to the county's section corners (within about 20 m). Press <em>Adjust placement</em> if you want to fine-tune one. Placements are saved in this browser and can be exported.</p>
+      <p>Use the time bar along the bottom of the map to step from 1861 to today, or press <em>Compare</em> and drag the handle to wipe between an old map and the present. The <em>Layers</em> button opens the full panel. You can also fade the modern lot over the 1861 and 1873 county maps, Rudolph's 1909 map, the 1925 Windes &amp; Marsh map, the 1939 aerial and the county's 1996&ndash;2024 parcel history. The three scans are georeferenced to the county's section corners (within about 20 m). Press <em>Adjust placement</em> if you want to fine-tune one. Placements are saved in this browser and can be exported.</p>
     </section>
   </div>
 </aside>
@@ -209,9 +209,12 @@ const FIELDS = 'PIN,situs_addr_line_1,situs_addr_city,TOWN,RANGE,SECT,legdesc1,l
 
 /* ---------- Scanned maps: image, rough corners (NW, NE, SW, SE), notes ---------- */
 const SCANS = [
-  { id:'lc1870s', year:'c. 1873', title:'Lake County landowner map (Vernon & Deerfield Twps)', src:'maps/lake_county_1870s.jpg',
-    corners:[[42.28188, -87.98102], [42.28064, -87.73884], [42.13677, -87.9838], [42.13553, -87.74162]],
-    note:'Shows the Chicago, Milwaukee & St. Paul line, so after c. 1872. Landowner names per tract.' },
+  { id:'lc1861', year:'1861', title:'Hale & Truesdell Map of Lake County', src:'maps/lake_county_1861.webp',
+    corners:[[42.239001, -87.885055], [42.238045, -87.723833], [42.123997, -87.886167], [42.123039, -87.724945]],
+    note:'George Hale (county surveyor) and J.M. Truesdell, 1861. Library of Congress. Fit to 27 surveyed section corners, median error about 12 m. Port Clinton and the Daggitt farms before Highland Park existed.' },
+  { id:'lc1873', year:'1873', title:'Frost & McLennan Map of Lake County', src:'maps/lake_county_1873.webp',
+    corners:[[42.238974, -87.885052], [42.2381, -87.740995], [42.132309, -87.886089], [42.131433, -87.742032]],
+    note:'Frost & McLennan, City Surveyors, Chicago, 1873. Library of Congress. Fit to 27 surveyed section corners, median error about 14 m. Landowner names per tract.' },
   { id:'rudolph1909r', year:'1909', title:"Rudolph's Map of Highland Park", src:'maps/rudolph_1909.jpg?v=2',
     corners:[[42.216081, -87.823187], [42.21569, -87.753378], [42.148476, -87.824727], [42.148086, -87.754918]],
     note:'David Rumsey Map Collection scan (List No. 10650.004), half resolution; aligned to the county section grid' },
@@ -411,6 +414,8 @@ const ESRI_TOPO = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_To
 const aerialURL = k => SVC.aerialTiles.replace('{YEAR}',k);
 const STRIP = [
   {label:'1843', cap:'First owner', kind:'patent'},
+  {label:'1861', cap:'Hale & Truesdell map', kind:'scan', id:'lc1861', stop:'lc1861'},
+  {label:'1873', cap:'Frost & McLennan map', kind:'scan', id:'lc1873', stop:'lc1873'},
   {label:'1909', cap:"Rudolph's map", kind:'pieces', stop:'rudolph1909r'},
   {label:'1925', cap:'Windes & Marsh map', kind:'scan', id:'windes1925', stop:'windes1925'},
   {label:'1939', cap:'Aerial', kind:'tiles', url:aerialURL('1939'), stop:'a1939'},
@@ -488,7 +493,7 @@ function openSnap(st, c){
 
 /* ---------- Time bar: one control for every historical layer, plus a swipe compare ---------- */
 const STOPS = [
-  {y:'1873', id:'lc1870s'}, {y:'1909', id:'rudolph1909r'}, {y:'1925', id:'windes1925'},
+  {y:'1861', id:'lc1861'}, {y:'1873', id:'lc1873'}, {y:'1909', id:'rudolph1909r'}, {y:'1925', id:'windes1925'},
   {y:'1939', id:'a1939'}, {y:'1946', id:'a1946'}, {y:'1961', id:'a1961'}, {y:'1980', id:'a1980cir'}, {y:'Today', id:null}
 ];
 let stopIdx = STOPS.length-1, cmpOn = false, divX = null, stopTimer = null;
