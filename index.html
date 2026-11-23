@@ -675,7 +675,7 @@ async function render(feat){
   <section class="card" id="storyCard">
     <h2>The story so far</h2>
     <div id="storyBody">${current.story?`<div class="story"><div class="meta">Written by Claude from the findings below · ${esc(current.storyModel||'')}</div>${current.story.split(/\n\s*\n/).map(p=>`<p>${esc(p)}</p>`).join('')}</div>`:`<p class="hint" style="margin:0 0 6px">Claude can turn the facts on this page into a short narrative for the owner. It uses only what is shown here plus general Highland Park history, and flags what is unverified.</p>`}
-    <div class="exportbar"><button type="button" class="primary" data-s="tell">${current.story?'Rewrite the story':'Tell the story'}</button><button type="button" data-s="key">${store.get('apikey','')?'Change API key':'Set API key'}</button></div>
+    <div class="exportbar"><button type="button" class="primary" data-s="tell">${current.story?'Rewrite the story':'Tell the story'}</button>${STORY_ENDPOINT?'':`<button type="button" data-s="key">${store.get('apikey','')?'Change API key':'Set API key'}</button>`}</div>
     <div id="keyRow" hidden><div class="keyrow"><input id="apikey" type="password" placeholder="Anthropic API key (sk-ant-…)" autocomplete="off"><button class="btn" type="button" data-s="savekey">Save</button></div><p class="hint">Stored only in this browser. Get one at console.anthropic.com. Each story costs about a cent.</p></div>
   </section>
   <section class="card">
@@ -726,26 +726,31 @@ async function render(feat){
 
 
 
-/* ---------- AI story (calls Anthropic directly; key stays in this browser) ---------- */
+/* ---------- AI story (via shared Worker if STORY_ENDPOINT is set; otherwise a per-browser key) ---------- */
 const STORY_MODEL = 'claude-sonnet-5-5';
+// Shared story service (Cloudflare Worker holding the API key). Paste its URL here;
+// leave empty to fall back to a per-browser API key.
+var STORY_ENDPOINT = 'https://homeroots-story.schwartzsj93.workers.dev';
 async function tellStory(){
-  const key = store.get('apikey',''); if(!key){ document.getElementById('keyRow').hidden=false; document.getElementById('apikey').focus(); return; }
+  const key = store.get('apikey',''); if(!STORY_ENDPOINT && !key){ document.getElementById('keyRow').hidden=false; document.getElementById('apikey').focus(); return; }
   const body = document.getElementById('storyBody'); const btn = document.querySelector('button[data-s=tell]'); btn.disabled=true; btn.textContent='Writing…';
   body.innerHTML = '<div class="story"><div class="meta">Writing… this takes 10 to 20 seconds</div></div>';
   const facts = reportMD(current, true);
   const system = `You are a local historian for Highland Park and Highwood, Illinois, writing for a homeowner. Write a short narrative (3 to 5 paragraphs, about 250 to 400 words) telling the story of the land under one house, from Potawatomi country and the Green Bay trail, through the first land patents and the farm families on the 19th-century maps, the subdivision era, to the present house. Use ONLY the facts supplied, plus well-established general Highland Park history (1833 treaty, Green Bay Road as post road 1832, incorporation 1869, Ravinia annexed 1899, 1920s annexations). Federal land patents (General Land Office records) are verified documents: treat the patentee marked as covering this lot as the proven first private owner and name them with confidence. Names transcribed from maps are unverified: say so plainly where you use them ("the maps show", "appears to have been"). Never invent owners, dates, prices or anecdotes. Do not restate every figure; weave the telling ones in. Plain, warm, specific prose. No headings, no bullet points, no preamble.`;
   try{
-    const r = await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
+    const r = STORY_ENDPOINT
+      ? await fetch(STORY_ENDPOINT, { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ facts }) })
+      : await fetch('https://api.anthropic.com/v1/messages', { method:'POST', headers:{ 'content-type':'application/json', 'x-api-key':key, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
       body: JSON.stringify({ model:STORY_MODEL, max_tokens:3000, system, messages:[{role:'user', content:'Findings for this property:\n\n'+facts}] }) });
     const data = await r.json().catch(()=>({}));
-    if(!r.ok) throw new Error(r.status===401?'That API key was rejected. Check it and try again.':`Claude returned ${r.status}: ${(data.error&&data.error.message)||''}`.slice(0,220));
+    if(!r.ok) throw new Error(r.status===401&&!STORY_ENDPOINT?'That API key was rejected. Check it and try again.':r.status===429?'Too many stories in a short time. Try again in a minute.':`Claude returned ${r.status}: ${(data.error&&data.error.message)||''}`.slice(0,220));
     let text = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
     if(data.stop_reason==='max_tokens') text += '\n\n[The story reached its length limit here. Click "Rewrite the story" to try again.]';
     if(!text.trim()) throw new Error('Claude returned an empty story. Try again.');
     current.story = text.trim(); current.storyModel = STORY_MODEL;
     try{ const saved = store.get('stories',{}); saved[current.pin] = {text:current.story, model:STORY_MODEL, when:Date.now()}; store.set('stories', saved); }catch(e){}
     render(current.feat);
-  }catch(err){ body.innerHTML = `<p class="hint" style="color:var(--plat)">${esc(err.message==='Failed to fetch'?'Could not reach Claude. Check your connection or ad blocker.':err.message)}</p>`; btn.disabled=false; btn.textContent='Tell the story'; }
+  }catch(err){ body.innerHTML = `<p class="hint" style="color:var(--plat)">${esc(err.message==='Failed to fetch'?(STORY_ENDPOINT?'Could not reach the story service. Check your connection, or that the Worker is deployed.':'Could not reach Claude. Check your connection or ad blocker.'):err.message)}</p>`; btn.disabled=false; btn.textContent='Tell the story'; }
 }
 document.getElementById('result').addEventListener('click', e=>{
   const b=e.target.closest('button[data-s]'); if(!b) return;
